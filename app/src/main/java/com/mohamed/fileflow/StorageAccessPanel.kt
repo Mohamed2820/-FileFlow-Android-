@@ -44,10 +44,12 @@ fun StorageAccessPanel() {
         scope.launch {
             status = "جارٍ فحص الملفات وحفظ بياناتها محليًا..."
             try {
-                val media = withContext(Dispatchers.IO) {
+                val broadAccessAtScan = AllFilesIndexer.hasAccess(context)
+                // With broad access, scan MediaStore.Files once so photos/videos/audio
+                // are not omitted when their separate granular permissions are absent.
+                val media = if (broadAccessAtScan) emptyList() else withContext(Dispatchers.IO) {
                     AndroidFileIndexer.scanMedia(context)
                 }
-                val broadAccessAtScan = AllFilesIndexer.hasAccess(context)
                 val allFiles = if (broadAccessAtScan) {
                     withContext(Dispatchers.IO) { AllFilesIndexer.scan(context) }
                 } else {
@@ -57,19 +59,24 @@ fun StorageAccessPanel() {
                 val count = withContext(Dispatchers.IO) {
                     val db = FileIndexDatabase(context)
                     try {
-                        // Never erase a previously indexed category when its permission
-                        // is currently denied or limited.
-                        if (AndroidFileIndexer.hasImageAccess(context)) {
-                            db.replaceSource("image", media.filter { it.source == "image" })
-                        }
-                        if (AndroidFileIndexer.hasVideoAccess(context)) {
-                            db.replaceSource("video", media.filter { it.source == "video" })
-                        }
-                        if (AndroidFileIndexer.hasAudioAccess(context)) {
-                            db.replaceSource("audio", media.filter { it.source == "audio" })
-                        }
                         if (broadAccessAtScan) {
+                            // The full index now includes media too; remove the older
+                            // MediaStore collection rows to avoid duplicate cards.
                             db.replaceSource("all-files", allFiles)
+                            db.replaceSource("image", emptyList())
+                            db.replaceSource("video", emptyList())
+                            db.replaceSource("audio", emptyList())
+                        } else {
+                            // Never erase a cached category when its permission is denied.
+                            if (AndroidFileIndexer.hasImageAccess(context)) {
+                                db.replaceSource("image", media.filter { it.source == "image" })
+                            }
+                            if (AndroidFileIndexer.hasVideoAccess(context)) {
+                                db.replaceSource("video", media.filter { it.source == "video" })
+                            }
+                            if (AndroidFileIndexer.hasAudioAccess(context)) {
+                                db.replaceSource("audio", media.filter { it.source == "audio" })
+                            }
                         }
                         db.allFiles().size
                     } finally {
