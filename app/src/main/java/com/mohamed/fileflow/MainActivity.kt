@@ -213,16 +213,25 @@ private fun TopHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var customCategories by remember { mutableStateOf<List<Triple<String, String, String?>>>(emptyList()) }
+    var showAddCategory by remember { mutableStateOf(false) }
+    var editingCategory by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
+    var categoryName by remember { mutableStateOf("") }
+    var categoryActionMenu by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
 
     LaunchedEffect(Unit) {
         counts = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
-                database.countByCategory()
+                counts = database.countByCategory()
+                customCategories = database.customCategories()
+                emptyMap()
             } finally {
                 database.close()
             }
@@ -297,6 +306,31 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("أقسامك المخصصة", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { categoryName = ""; showAddCategory = true }) {
+                    Icon(Icons.Rounded.Add, null); Text("إضافة قسم")
+                }
+            }
+        }
+        items(customCategories, key = { it.first }) { custom ->
+            Card(
+                modifier = Modifier.fillMaxWidth().combinedClickable(
+                    onClick = { onCategory(custom.first) },
+                    onLongClick = { categoryActionMenu = custom }
+                ),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(15.dp)
+            ) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Folder, null, tint = Color(0xFF16A34A))
+                    Spacer(Modifier.width(10.dp))
+                    Text(custom.second, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
+                }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("الأقسام والملفات", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 TextButton(onClick = { onNavigate("all") }) { Text("عرض الكل") }
             }
@@ -321,6 +355,73 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                 }
             }
         }
+    }
+
+    if (showAddCategory || editingCategory != null) {
+        val editing = editingCategory
+        AlertDialog(
+            onDismissRequest = { showAddCategory = false; editingCategory = null },
+            title = { Text(if (editing == null) "إضافة قسم يدوي" else "تعديل اسم القسم") },
+            text = {
+                OutlinedTextField(value = categoryName, onValueChange = { categoryName = it }, singleLine = true, label = { Text("اسم القسم") })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val clean = categoryName.trim()
+                    if (clean.isNotBlank()) {
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                val db = FileIndexDatabase(context)
+                                try {
+                                    if (editing == null) db.addCustomCategory("custom:" + java.util.UUID.randomUUID().toString(), clean)
+                                    else db.renameCustomCategory(editing.first, clean)
+                                } finally { db.close() }
+                            }
+                            customCategories = withContext(Dispatchers.IO) {
+                                val db = FileIndexDatabase(context)
+                                try { db.customCategories() } finally { db.close() }
+                            }
+                            showAddCategory = false
+                            editingCategory = null
+                        }
+                    }
+                }) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { showAddCategory = false; editingCategory = null }) { Text("إلغاء") } }
+        )
+    }
+
+    categoryActionMenu?.let { category ->
+        AlertDialog(
+            onDismissRequest = { categoryActionMenu = null },
+            title = { Text(category.second) },
+            text = { Text("حذف القسم المخصص لا يحذف الملفات الأصلية من الهاتف.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    categoryName = category.second
+                    editingCategory = category
+                    categoryActionMenu = null
+                }) { Text("إعادة تسمية") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                val db = FileIndexDatabase(context)
+                                try { db.deleteCustomCategory(category.first) } finally { db.close() }
+                            }
+                            customCategories = withContext(Dispatchers.IO) {
+                                val db = FileIndexDatabase(context)
+                                try { db.customCategories() } finally { db.close() }
+                            }
+                        }
+                        categoryActionMenu = null
+                    }) { Text("حذف القسم", color = MaterialTheme.colorScheme.error) }
+                    TextButton(onClick = { categoryActionMenu = null }) { Text("إغلاق") }
+                }
+            }
+        )
     }
 }
 
