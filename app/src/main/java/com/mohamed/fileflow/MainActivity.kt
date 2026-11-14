@@ -359,7 +359,7 @@ private fun ArchiveScreen(
                 }
                 EmptyState(icon, message, "لن تظهر نتائج قبل ربط الهاتف وفهرسة الملفات في المرحلة الثانية.")
             }
-            selected in listOf("images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
+            selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
                 IndexedFilesContent(selected, query, gridView)
             }
             else -> {
