@@ -67,13 +67,13 @@ object FileClassifier {
             listOf("مشروع", "مشاريع", "مشروعات", "project", "projects").any {
                 matchesTerm(normalizedName, normalize(it))
             } -> "projects"
+            extension in codeExtensions -> "code"
 
             mime == "application/pdf" || mime.startsWith("text/") ||
                 mime.contains("msword") || mime.contains("officedocument") ||
                 mime.contains("spreadsheet") || mime.contains("presentation") ||
                 mime.contains("epub") || extension in documentExtensions -> "documents"
             mime.contains("zip") || mime.contains("rar") || extension in archiveExtensions -> "archives"
-            extension in codeExtensions -> "code"
             else -> "other"
         }
     }
