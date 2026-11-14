@@ -35,7 +35,7 @@ data class TreeScanResult(
 )
 
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 3) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 4) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -53,6 +53,7 @@ class FileIndexDatabase(context: Context) :
         )
         db.execSQL("CREATE INDEX idx_indexed_files_category ON indexed_files(category)")
         db.execSQL("CREATE INDEX idx_indexed_files_name ON indexed_files(name)")
+        db.execSQL("CREATE TABLE category_overrides (uri TEXT PRIMARY KEY NOT NULL, category TEXT NOT NULL)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -85,6 +86,18 @@ class FileIndexDatabase(context: Context) :
                 db.update("indexed_files", values, "uri = ?", arrayOf(uri))
             }
         }
+        if (oldVersion < 4) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS category_overrides (uri TEXT PRIMARY KEY NOT NULL, category TEXT NOT NULL)")
+        }
+    }
+
+    private fun manualCategory(uri: String): String? {
+        readableDatabase.query(
+            "category_overrides", arrayOf("category"), "uri = ?", arrayOf(uri),
+            null, null, null
+        ).use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
     }
 
     fun replaceSource(source: String, files: List<IndexedFile>) {
@@ -98,7 +111,7 @@ class FileIndexDatabase(context: Context) :
                     put("mime_type", file.mimeType)
                     put("size_bytes", file.sizeBytes)
                     put("modified_seconds", file.modifiedSeconds)
-                    put("category", file.category)
+                    put("category", manualCategory(file.uri) ?: file.category)
                     put("source", file.source)
                 }
                 val insertedRowId = writableDatabase.insertWithOnConflict(
@@ -125,7 +138,7 @@ class FileIndexDatabase(context: Context) :
                     put("mime_type", file.mimeType)
                     put("size_bytes", file.sizeBytes)
                     put("modified_seconds", file.modifiedSeconds)
-                    put("category", file.category)
+                    put("category", manualCategory(file.uri) ?: file.category)
                     put("source", file.source)
                 }
                 val row = writableDatabase.insertWithOnConflict(
@@ -145,6 +158,27 @@ class FileIndexDatabase(context: Context) :
         try {
             uris.forEach { uri ->
                 writableDatabase.delete("indexed_files", "uri = ?", arrayOf(uri))
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
+    fun updateCategory(uris: Collection<String>, category: String) {
+        if (uris.isEmpty()) return
+        writableDatabase.beginTransaction()
+        try {
+            val values = ContentValues().apply { put("category", category) }
+            uris.forEach { uri ->
+                writableDatabase.update("indexed_files", values, "uri = ?", arrayOf(uri))
+                val override = ContentValues().apply {
+                    put("uri", uri)
+                    put("category", category)
+                }
+                writableDatabase.insertWithOnConflict(
+                    "category_overrides", null, override, SQLiteDatabase.CONFLICT_REPLACE
+                )
             }
             writableDatabase.setTransactionSuccessful()
         } finally {

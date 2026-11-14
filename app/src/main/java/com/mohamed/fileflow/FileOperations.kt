@@ -2,7 +2,9 @@ package com.mohamed.fileflow
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.IntentSender
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
@@ -22,6 +24,33 @@ data class FileOperationResult(
  * operations use only document URIs for which the user granted access.
  */
 object FileOperations {
+
+    /**
+     * Android 11+ requires explicit user approval before changing or deleting
+     * many MediaStore-owned files. The UI launches these senders and retries
+     * the requested operation only after Android reports approval.
+     */
+    fun mediaWriteRequest(context: Context, file: IndexedFile): IntentSender? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val uri = runCatching { Uri.parse(file.uri) }.getOrNull() ?: return null
+        if (uri.scheme != "content" || uri.authority != "media") return null
+        return runCatching {
+            MediaStore.createWriteRequest(context.contentResolver, listOf(uri)).intentSender
+        }.getOrNull()
+    }
+
+    fun mediaDeleteRequest(context: Context, files: Collection<IndexedFile>): IntentSender? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+        val uris = files.mapNotNull { file ->
+            runCatching { Uri.parse(file.uri) }.getOrNull()?.takeIf {
+                it.scheme == "content" && it.authority == "media"
+            }
+        }.distinct()
+        if (uris.isEmpty()) return null
+        return runCatching {
+            MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+        }.getOrNull()
+    }
 
     fun mimeType(context: Context, file: IndexedFile): String {
         val uri = runCatching { Uri.parse(file.uri) }.getOrNull()
