@@ -1,20 +1,28 @@
 # Stage 2 — Android storage integration
 
-## Implemented in batch 1
-- Android media permission declarations for images, videos, audio, Android 14 selected visual media, and legacy read access through API 32.
-- Runtime permission request flow from the home screen.
-- MediaStore metadata scanning for image, video, and audio collections.
-- Storage Access Framework folder picker with persisted read-only tree permission.
-- Recursive metadata indexing for files inside the selected tree using DocumentFile.
-- Local SQLite metadata database. Only content URIs and metadata are stored; source files are not copied or changed during indexing.
-- The home screen exposes the real permission and indexing actions and reports the indexed count.
+## Implemented
+- Runtime permission flow for media access on supported Android versions.
+- MediaStore metadata indexing for images, videos, and audio.
+- Storage Access Framework folder selection with persisted read access.
+- Recursive indexing of the user-selected folder tree, with per-folder/document error isolation and URI cycle protection.
+- Local SQLite metadata index. Indexing does not copy, move, rename, edit, or delete source files.
+- Browsing indexed image, video, audio, and other-file categories.
+- Opening an indexed item with an Android viewer through its content URI and read grant.
+- Search within the indexed file name and MIME type from the application search field.
+- Explicit empty-state messaging when a category has no indexed results.
 
-## Current boundaries
-- The indexer does not request MANAGE_EXTERNAL_STORAGE and does not bypass Android scoped storage.
-- Access to Android/data and other protected locations is not promised.
-- SAF indexing covers only the tree explicitly selected by the user.
-- This batch does not yet implement full file browsing/actions, project/study semantic grouping, installed-app inventory, duplicate detection, or on-device device testing.
-- A successful CI build verifies compilation only; it cannot validate the Samsung device permission dialogs or real media results.
+## Access and privacy boundaries
+- The app does not request MANAGE_EXTERNAL_STORAGE and does not bypass scoped storage.
+- Android/data and other protected locations are not promised or accessed by bypass.
+- MediaStore access is limited by granted permissions; Android 14+ selected-photo/video access can produce partial results.
+- SAF access is limited to the folder tree explicitly selected by the user.
+- The app stores metadata and content URIs locally; source file contents are not uploaded.
+
+## Not claimed as complete in this stage
+- Semantic study-course and programming-project grouping requires user-confirmed folder roots/rules and is not inferred from filenames alone.
+- Installed-app inventory, persistent favorites/recent history, duplicate analysis, and destructive file operations are not part of this storage-connection batch.
+- Device-specific permission dialogs and real file opening still require stage 4 testing on the target phone.
 
 ## Verification
-The pull request runs the Android assembleDebug workflow. The workflow result must be checked before merging this batch.
+- GitHub Actions `assembleDebug` verifies that the Android debug variant compiles.
+- CI success is not equivalent to installation or device-level validation.
