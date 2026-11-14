@@ -859,7 +859,7 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 ) {
                     gridItems(visibleFiles, key = { it.uri }) { file ->
                         Card(
-                            modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
+                            modifier = Modifier.fillMaxWidth().clickable { detailFile = file },
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                             shape = RoundedCornerShape(14.dp)
                         ) {
@@ -901,7 +901,7 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                                     Icon(fileCategoryIcon(file.category), null, tint = brand)
                                 }
                             },
-                            modifier = Modifier.clickable { openFile(file) }
+                            modifier = Modifier.clickable { detailFile = file }
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
