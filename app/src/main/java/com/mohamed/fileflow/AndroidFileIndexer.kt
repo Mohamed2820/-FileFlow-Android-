@@ -205,6 +205,16 @@ class FileIndexDatabase(context: Context) :
         writableDatabase.update("custom_categories", ContentValues().apply { put("name", name) }, "id = ?", arrayOf(id))
     }
 
+    fun moveCustomCategory(id: String, parentId: String?) {
+        if (parentId == id) return
+        writableDatabase.update(
+            "custom_categories",
+            ContentValues().apply { if (parentId == null) putNull("parent_id") else put("parent_id", parentId) },
+            "id = ?",
+            arrayOf(id)
+        )
+    }
+
     fun deleteCustomCategory(id: String) {
         writableDatabase.beginTransaction()
         try {
