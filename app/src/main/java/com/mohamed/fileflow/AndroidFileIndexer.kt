@@ -57,8 +57,9 @@ class FileIndexDatabase(context: Context) :
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
-            // Reclassify already-indexed rows using the semantic filename rules.
-            // No source file is opened or modified; only local metadata changes.
+            // Reclassify indexed metadata using semantic filename rules.
+            // Collect first, then update after closing the read cursor.
+            val rows = mutableListOf<Triple<String, String, String?>>()
             db.query(
                 "indexed_files",
                 arrayOf("uri", "name", "mime_type"),
@@ -68,14 +69,18 @@ class FileIndexDatabase(context: Context) :
                 val nameIndex = cursor.getColumnIndexOrThrow("name")
                 val mimeIndex = cursor.getColumnIndexOrThrow("mime_type")
                 while (cursor.moveToNext()) {
-                    val uri = cursor.getString(uriIndex)
-                    val name = cursor.getString(nameIndex)
-                    val mime = if (cursor.isNull(mimeIndex)) null else cursor.getString(mimeIndex)
-                    val values = ContentValues().apply {
-                        put("category", FileClassifier.classify(name, mime))
-                    }
-                    db.update("indexed_files", values, "uri = ?", arrayOf(uri))
+                    rows += Triple(
+                        cursor.getString(uriIndex),
+                        cursor.getString(nameIndex),
+                        if (cursor.isNull(mimeIndex)) null else cursor.getString(mimeIndex)
+                    )
                 }
+            }
+            rows.forEach { (uri, name, mime) ->
+                val values = ContentValues().apply {
+                    put("category", FileClassifier.classify(name, mime))
+                }
+                db.update("indexed_files", values, "uri = ?", arrayOf(uri))
             }
         }
     }
