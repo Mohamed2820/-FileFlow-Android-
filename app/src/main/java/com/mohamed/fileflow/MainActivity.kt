@@ -76,10 +76,10 @@ private val defaultCategories = listOf(
     FileCategory("archives", "الملفات المضغوطة", "ZIP وRAR و7Z وغيرها", "حزم وأرشيفات الملفات المعروفة من الامتداد أو نوع MIME.", Icons.Rounded.FolderZip, Color(0xFFD69A00)),
     FileCategory("code", "ملفات البرمجة", "المصدر والإعدادات والبيانات", "ملفات الشيفرة والتهيئة المعروفة من امتداداتها.", Icons.Rounded.Code, Color(0xFF2E7D32)),
     FileCategory("installers", "ملفات تثبيت التطبيقات", "APK وAAB والحزم", "ملفات تثبيت أو حزم تطبيقات Android.", Icons.Rounded.Android, Color(0xFF00897B)),
-    FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF51B68A)),
-    FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFF4EB8C5)),
+    FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF2E7D32)),
+    FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFFEF6C00)),
     FileCategory("empty", "الملفات الفارغة", "ملفات بحجم صفر", "إظهار الملفات التي يبلغ حجمها صفرًا، دون حذفها أو تعديلها تلقائيًا.", Icons.Rounded.InsertDriveFile, Color(0xFF757575)),
-    FileCategory("other", "أخرى", "ملفات لم يتم تصنيفها بعد", "الملفات التي لا تتوفر أدلة كافية لتصنيفها ستبقى هنا بدل التخمين.", Icons.Rounded.Folder, Color(0xFF9299A8))
+    FileCategory("other", "أخرى", "ملفات لم يتم تصنيفها بعد", "الملفات التي لا تتوفر أدلة كافية لتصنيفها ستبقى هنا بدل التخمين.", Icons.Rounded.Folder, Color(0xFF424242))
 )
 
 private val categories = mutableStateListOf<FileCategory>().apply { addAll(defaultCategories) }
@@ -233,7 +233,7 @@ private fun FileFlowApp() {
                 when (selected) {
                     "home" -> HomeScreen(
                         onNavigate = { navigate(it) }, onCategory = { navigate(it) },
-                        onEditCategory = { editCategory(it) }
+                        onEditCategory = { editCategory(it) }, onAddCategory = { addCategory() }
                     )
                     "settings" -> SettingsScreen(dark = dark, onTheme = { dark = it })
                     else -> ArchiveScreen(
@@ -364,12 +364,13 @@ private fun TopHeader(
 private fun HomeScreen(
     onNavigate: (String) -> Unit,
     onCategory: (String) -> Unit,
-    onEditCategory: (FileCategory) -> Unit
+    onEditCategory: (FileCategory) -> Unit,
+    onAddCategory: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(categories.size) {
         counts = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
@@ -424,8 +425,16 @@ private fun HomeScreen(
         item { StorageAccessPanel() }
         item { DeviceStorageCard() }
         item {
-            Text("التصنيف الذكي", fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text("تنظيم حسب معنى اسم الملف ومادته، وليس امتداده فقط", color = muted, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("التصنيف الذكي", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text("تنظيم حسب معنى اسم الملف ومادته، وليس امتداده فقط", color = muted, fontSize = 11.sp)
+                }
+                TextButton(onClick = onAddCategory) {
+                    Icon(Icons.Rounded.Add, null, modifier = Modifier.size(17.dp))
+                    Text("إضافة قسم", fontSize = 11.sp)
+                }
+            }
         }
         items(wideCategories) { category ->
             Card(
