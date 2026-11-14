@@ -907,7 +907,8 @@ private fun IndexedFilesContent(
     selectedSubject: String?,
     onSubjectChange: (String?) -> Unit,
     selectedExtension: String?,
-    onExtensionChange: (String?) -> Unit
+    onExtensionChange: (String?) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1071,7 +1072,7 @@ private fun IndexedFilesContent(
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         if (selecting) {
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 7.dp, vertical = 1.dp),
