@@ -189,7 +189,7 @@ object AndroidFileIndexer {
                 val id = cursor.getLong(idCol)
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
-                    name = cursor.getString(nameCol) ?: "بدون اسم",
+                    name = android.net.Uri.decode(cursor.getString(nameCol) ?: "بدون اسم"),
                     mimeType = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol),
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
@@ -250,7 +250,7 @@ object AndroidFileIndexer {
                     when {
                         child.isDirectory -> pending.addLast(child)
                         child.isFile -> {
-                            val name = child.name?.takeIf { it.isNotBlank() } ?: "بدون اسم"
+                            val name = child.name?.takeIf { it.isNotBlank() }?.let(android.net.Uri::decode) ?: "بدون اسم"
                             val mime = child.type
                             rows += IndexedFile(
                                 uri = child.uri.toString(),
