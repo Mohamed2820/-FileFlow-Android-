@@ -33,6 +33,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -206,9 +207,31 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text("مساحة منظمة، بدون فوضى", color = brand, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text("كل ملفاتك في مكان واحد", fontSize = 25.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-            Text("أرشيف واضح يساعدك توصل لملفاتك بسرعة.", color = muted, fontSize = 13.sp)
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFF21164C), Color(0xFF171A3D), Color(0xFF102A46))
+                            )
+                        )
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("FILEFLOW", color = Color(0xFFBDA3FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(5.dp))
+                        Text("إدارة ملفاتك بذكاء", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("تصنيف ذكي • معاينات • وصول أسرع", color = Color(0xFFC6C6E8), fontSize = 11.sp)
+                    }
+                    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF8050E8)) {
+                        Icon(Icons.Rounded.FolderCopy, null, tint = Color.White, modifier = Modifier.padding(14.dp).size(36.dp))
+                    }
+                }
+            }
         }
         item {
             StorageAccessPanel()
@@ -243,15 +266,28 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
 private fun CategoryCard(category: FileCategory, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
         modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp)) {
-            Surface(shape = RoundedCornerShape(12.dp), color = category.tint.copy(alpha = 0.13f)) {
-                Icon(category.icon, contentDescription = null, tint = category.tint, modifier = Modifier.padding(9.dp).size(22.dp))
+        Column(
+            Modifier.fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(category.tint.copy(alpha = 0.22f), MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.surface)
+                    ),
+                    RoundedCornerShape(20.dp)
+                )
+                .padding(15.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(13.dp), color = category.tint.copy(alpha = 0.18f)) {
+                    Icon(category.icon, contentDescription = null, tint = category.tint, modifier = Modifier.padding(10.dp).size(25.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Rounded.ChevronLeft, contentDescription = null, tint = category.tint.copy(alpha = 0.9f))
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(13.dp))
             Text(category.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
             Text(category.subtitle, fontSize = 10.sp, color = muted, maxLines = 2, minLines = 2)
         }
