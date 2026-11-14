@@ -276,7 +276,7 @@ object AndroidFileIndexer {
                     when {
                         child.isDirectory -> pending.addLast(child)
                         child.isFile -> {
-                            val name = child.name?.takeIf { it.isNotBlank() }?.let(android.net.Uri::decode) ?: "بدون اسم"
+                            val name = child.name?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
                             val mime = child.type
                             rows += IndexedFile(
                                 uri = child.uri.toString(),
