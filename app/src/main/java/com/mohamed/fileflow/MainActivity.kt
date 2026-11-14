@@ -311,7 +311,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         }
         items(customCategories, key = { it.first }) { custom ->
             Card(
-                modifier = Modifier.fillMaxWidth().combinedClickable(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).combinedClickable(
                     onClick = { onCategory(custom.first) },
                     onLongClick = { categoryActionMenu = custom }
                 ),
@@ -425,7 +425,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
 @Composable
 private fun CategoryCard(category: FileCategory, modifier: Modifier = Modifier, count: Int? = null, onClick: () -> Unit) {
     Card(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier.heightIn(min = 76.dp).clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
@@ -1072,7 +1072,7 @@ private fun IndexedFilesContent(
                             val count = if (showingSubjectTiles) files.count { studySubjectLabel(it) == group }
                             else extensionSource.count { extensionLabel(it) == group }
                             Card(
-                                modifier = Modifier.fillMaxWidth().clickable {
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp).clickable {
                                     if (showingSubjectTiles) onSubjectChange(group) else onExtensionChange(group)
                                 },
                                 shape = RoundedCornerShape(15.dp),
@@ -1113,7 +1113,7 @@ private fun IndexedFilesContent(
                         ) {
                             Box {
                                 MediaThumbnail(file, selected, Modifier.fillMaxWidth().aspectRatio(1f))
-                                if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFF8B5CF6), modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
+                                if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFFDC2626), modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                             }
                             Text(file.name, maxLines = 1, fontSize = 10.sp, color = MaterialTheme.colorScheme.onBackground)
                             Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 9.sp, color = muted)
