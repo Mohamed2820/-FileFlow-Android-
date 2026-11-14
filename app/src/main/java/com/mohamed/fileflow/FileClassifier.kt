@@ -42,13 +42,18 @@ object FileClassifier {
 
     fun studySubject(name: String): String? {
         val normalized = normalize(name)
-        return studySubjects.entries.mapNotNull { (subject, terms) ->
-            val matchedLength = terms
-                .map { normalize(it) }
-                .filter { matchesTerm(normalized, it) }
-                .maxOfOrNull { it.length }
-            matchedLength?.let { subject to it }
-        }.maxByOrNull { it.second.length }?.first
+        var bestSubject: String? = null
+        var bestMatchedLength = 0
+        for ((subject, terms) in studySubjects) {
+            for (term in terms) {
+                val normalizedTerm = normalize(term)
+                if (normalizedTerm.length > bestMatchedLength && matchesTerm(normalized, normalizedTerm)) {
+                    bestSubject = subject
+                    bestMatchedLength = normalizedTerm.length
+                }
+            }
+        }
+        return bestSubject
     }
 
     fun classify(name: String, mimeType: String?): String {
