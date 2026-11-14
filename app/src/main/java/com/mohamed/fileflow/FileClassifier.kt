@@ -36,7 +36,7 @@ object FileClassifier {
     fun studySubject(name: String): String? {
         val normalized = normalize(name)
         return studySubjects.entries.firstOrNull { (_, terms) ->
-            terms.any { term -> normalized.contains(normalize(term)) }
+            terms.any { term -> matchesTerm(normalized, normalize(term)) }
         }?.key
     }
 
@@ -54,7 +54,7 @@ object FileClassifier {
             // Semantic filename matching intentionally precedes code extensions.
             studySubject(name) != null -> "study"
             listOf("مشروع", "مشاريع", "مشروعات", "project", "projects").any {
-                normalizedName.contains(normalize(it))
+                matchesTerm(normalizedName, normalize(it))
             } -> "projects"
 
             mime == "application/pdf" || mime.startsWith("text/") ||
@@ -65,6 +65,12 @@ object FileClassifier {
             extension in codeExtensions -> "code"
             else -> "other"
         }
+    }
+
+    private fun matchesTerm(text: String, term: String): Boolean {
+        if (term.any { it.code in 0x0600..0x06FF }) return text.contains(term)
+        return Regex("(^|[^a-z0-9])" + Regex.escape(term) + "([^a-z0-9]|$)")
+            .containsMatchIn(text)
     }
 
     private fun normalize(value: String): String = value
