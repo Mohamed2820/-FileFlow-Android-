@@ -32,4 +32,18 @@ class FileClassifierTest {
         assertEquals("videos", FileClassifier.classify("clip", "video/mp4"))
         assertEquals("audio", FileClassifier.classify("recording", "audio/ogg"))
     }
+    @Test
+    fun academicSubjectNameWinsOverSourceCodeExtension() {
+        assertEquals("study", FileClassifier.classify("Genetics.py", "application/octet-stream"))
+        assertEquals("study", FileClassifier.classify("محاضرات فسيولوجي.kt", "text/plain"))
+        assertEquals("وراثة", FileClassifier.studySubject("Genetics_Lecture_02.pdf"))
+        assertEquals("فسيولوجي", FileClassifier.studySubject("ملخص فسيولوجيا النبات.pdf"))
+    }
+
+    @Test
+    fun explicitProjectNamesAreGroupedAsProjects() {
+        assertEquals("projects", FileClassifier.classify("MOMO_Project_Main.kt", "application/octet-stream"))
+        assertEquals("projects", FileClassifier.classify("مشروع التخرج.pdf", "application/pdf"))
+    }
+
 }
