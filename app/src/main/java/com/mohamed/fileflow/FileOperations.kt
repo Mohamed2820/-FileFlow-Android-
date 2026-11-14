@@ -26,7 +26,13 @@ object FileOperations {
     fun mimeType(context: Context, file: IndexedFile): String {
         val uri = runCatching { Uri.parse(file.uri) }.getOrNull()
         val providerType = uri?.let { runCatching { context.contentResolver.getType(it) }.getOrNull() }
-        if (!providerType.isNullOrBlank()) return providerType.substringBefore(';')
+            ?.substringBefore(';')
+            ?.takeIf { it.isNotBlank() && it != "*/*" && it != "application/octet-stream" }
+
+        val indexedType = file.mimeType?.substringBefore(';')
+            ?.takeIf { it.isNotBlank() && it != "*/*" && it != "application/octet-stream" }
+        if (providerType != null) return providerType
+        if (indexedType != null) return indexedType
 
         val extension = file.name.substringAfterLast('.', "").lowercase()
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
@@ -51,13 +57,14 @@ object FileOperations {
 
         return runCatching {
             val uri = Uri.parse(file.uri)
-            val pathFile = resolveSharedStorageFile(context, uri)
-            if (pathFile != null) {
-                val parent = pathFile.parentFile ?: return FileOperationResult(false, message = "تعذر تحديد مجلد الملف.")
-                val target = File(parent, name)
-                if (target.exists()) return FileOperationResult(false, message = "يوجد ملف آخر بهذا الاسم.")
-                if (!pathFile.renameTo(target)) return FileOperationResult(false, message = "رفض Android إعادة تسمية الملف. أعد اختيار المجلد بصلاحية الكتابة.")
-                return FileOperationResult(true, file.copy(name = name), "تمت إعادة التسمية.")
+
+            // MediaStore owns its indexed item identity; ask it to rename first.
+            if (uri.scheme == "content" && uri.authority == "media") {
+                val values = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, name) }
+                val changed = context.contentResolver.update(uri, values, null, null)
+                if (changed > 0) {
+                    return FileOperationResult(true, file.copy(name = name), "تمت إعادة التسمية.")
+                }
             }
 
             val document = DocumentFile.fromSingleUri(context, uri)
@@ -65,10 +72,19 @@ object FileOperations {
                 return FileOperationResult(true, file.copy(uri = document.uri.toString(), name = name), "تمت إعادة التسمية.")
             }
 
-            val values = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, name) }
-            val changed = context.contentResolver.update(uri, values, null, null)
-            if (changed > 0) FileOperationResult(true, file.copy(name = name), "تمت إعادة التسمية.")
-            else FileOperationResult(false, message = "هذا المصدر لا يسمح بإعادة التسمية. اختر المجلد مرة أخرى مع صلاحية القراءة والكتابة.")
+            val pathFile = resolveSharedStorageFile(context, uri)
+            if (pathFile != null) {
+                val parent = pathFile.parentFile
+                    ?: return FileOperationResult(false, message = "تعذر تحديد مجلد الملف.")
+                val target = File(parent, name)
+                if (target.exists()) return FileOperationResult(false, message = "يوجد ملف آخر بهذا الاسم.")
+                if (!pathFile.renameTo(target)) {
+                    return FileOperationResult(false, message = "رفض Android إعادة تسمية الملف.")
+                }
+                return FileOperationResult(true, file.copy(name = name), "تمت إعادة التسمية.")
+            }
+
+            FileOperationResult(false, message = "هذا المصدر لا يسمح بإعادة التسمية. أعد اختيار مجلده مع صلاحية الكتابة.")
         }.getOrElse { error ->
             FileOperationResult(false, message = "تعذرت إعادة التسمية: ${error.localizedMessage ?: "خطأ في الوصول"}.")
         }
@@ -77,17 +93,27 @@ object FileOperations {
     fun delete(context: Context, file: IndexedFile): FileOperationResult {
         return runCatching {
             val uri = Uri.parse(file.uri)
-            val pathFile = resolveSharedStorageFile(context, uri)
-            val deleted = when {
-                pathFile != null -> pathFile.delete()
-                else -> {
-                    val document = DocumentFile.fromSingleUri(context, uri)
-                    if (document != null && document.canWrite()) document.delete()
-                    else runCatching { context.contentResolver.delete(uri, null, null) > 0 }.getOrDefault(false)
-                }
+
+            // Prefer deleting through the owning provider so MediaStore metadata
+            // is updated together with the underlying file.
+            if (uri.scheme == "content") {
+                val providerDeleted = runCatching {
+                    context.contentResolver.delete(uri, null, null) > 0
+                }.getOrDefault(false)
+                if (providerDeleted) return FileOperationResult(true, file, "تم حذف الملف.")
             }
-            if (deleted) FileOperationResult(true, file, "تم حذف الملف.")
-            else FileOperationResult(false, message = "لم يسمح Android بحذف الملف. قد تحتاج إلى إعادة اختيار مجلده بصلاحية الكتابة.")
+
+            val document = DocumentFile.fromSingleUri(context, uri)
+            if (document != null && document.canWrite() && document.delete()) {
+                return FileOperationResult(true, file, "تم حذف الملف.")
+            }
+
+            val pathFile = resolveSharedStorageFile(context, uri)
+            if (pathFile != null && pathFile.delete()) {
+                return FileOperationResult(true, file, "تم حذف الملف.")
+            }
+
+            FileOperationResult(false, message = "لم يسمح Android بحذف الملف. قد تحتاج إلى إعادة اختيار مجلده بصلاحية الكتابة.")
         }.getOrElse { error ->
             FileOperationResult(false, message = "تعذر حذف الملف: ${error.localizedMessage ?: "خطأ في الوصول"}.")
         }
