@@ -774,6 +774,8 @@ private fun IndexedFilesContent(
     val selectedUris = remember(selected) { mutableStateListOf<String>() }
     var refreshKey by remember(selected) { mutableIntStateOf(0) }
     var actionStatus by remember { mutableStateOf<String?>(null) }
+    var customCategories by remember { mutableStateOf<List<Triple<String, String, String?>>>(emptyList()) }
+    var customCategoryMenuExpanded by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<IndexedFile?>(null) }
     var renameValue by remember { mutableStateOf("") }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -803,6 +805,10 @@ private fun IndexedFilesContent(
             } finally {
                 database.close()
             }
+        }
+        customCategories = withContext(Dispatchers.IO) {
+            val database = FileIndexDatabase(context)
+            try { database.customCategories() } finally { database.close() }
         }
     }
 
@@ -943,6 +949,35 @@ private fun IndexedFilesContent(
                     }) {
                         Icon(Icons.Rounded.Edit, null, modifier = Modifier.size(16.dp))
                         Text("تسمية", fontSize = 10.sp)
+                    }
+                }
+                Box {
+                    TextButton(onClick = { customCategoryMenuExpanded = true }) {
+                        Icon(Icons.Rounded.Folder, null, modifier = Modifier.size(16.dp))
+                        Text("تصنيف", fontSize = 10.sp)
+                    }
+                    DropdownMenu(expanded = customCategoryMenuExpanded, onDismissRequest = { customCategoryMenuExpanded = false }) {
+                        if (customCategories.isEmpty()) {
+                            DropdownMenuItem(text = { Text("أنشئ قسمًا من الرئيسية أولًا") }, onClick = { customCategoryMenuExpanded = false })
+                        } else customCategories.forEach { custom ->
+                            DropdownMenuItem(
+                                text = { Text(custom.second) },
+                                onClick = {
+                                    scope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            val db = FileIndexDatabase(context)
+                                            try { selectedFiles.forEach { db.assignFileToCustomCategory(it.uri, custom.first) } }
+                                            finally { db.close() }
+                                        }
+                                        actionStatus = "تم إسناد ${selectedFiles.size} ملفًا إلى ${custom.second}."
+                                        selectedUris.clear()
+                                        selecting = false
+                                        refreshKey++
+                                    }
+                                    customCategoryMenuExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
                 TextButton(onClick = {
