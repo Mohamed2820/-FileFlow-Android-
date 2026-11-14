@@ -59,8 +59,14 @@ fun StorageAccessPanel() {
                 }
                 withContext(Dispatchers.IO) {
                     val database = FileIndexDatabase(context)
-                    listOf("image", "video", "audio").forEach { source ->
-                        database.replaceSource(source, files.filter { it.source == source })
+                    if (AndroidFileIndexer.hasImageAccess(context)) {
+                        database.replaceSource("image", files.filter { it.source == "image" })
+                    }
+                    if (AndroidFileIndexer.hasVideoAccess(context)) {
+                        database.replaceSource("video", files.filter { it.source == "video" })
+                    }
+                    if (AndroidFileIndexer.hasAudioAccess(context)) {
+                        database.replaceSource("audio", files.filter { it.source == "audio" })
                     }
                     indexedCount = database.allFiles().size
                     database.close()
