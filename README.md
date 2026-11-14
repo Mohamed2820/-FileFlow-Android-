@@ -1,6 +1,6 @@
 # FileFlow Android
 
-Native Android file archive and file manager.
+Native Android file archive and file manager built with Kotlin and Jetpack Compose.
 
 ## Product rules
 - Index files without moving or modifying originals.
@@ -16,12 +16,21 @@ Native Android file archive and file manager.
 3. Build and publish a real APK through GitHub Actions.
 4. Install and test on a physical Android device, fix defects, and retest.
 
-## Current implementation
-- Native Kotlin + Jetpack Compose Android application.
-- Arabic-first interface with home, category navigation, search field, and settings.
-- The interface does not fabricate phone files or storage figures. Device data remains unavailable until the Android integration stage.
-- Application ID: `com.mohamed.fileflow`
-- Minimum Android version: Android 8.0 (API 26).
+## Stage 1 interface
+- Native Kotlin + Jetpack Compose application.
+- Arabic-first home screen, category navigation, search across category names/descriptions, list/grid presentation, and category sorting.
+- Dedicated archive states for all files, recent files, favorites, duplicates, and each smart category.
+- Settings screen with light/dark appearance control and clear privacy/access explanations.
+- No fabricated device capacity, file counts, file names, or scan results. Real device data appears only after Android integration in stage 2.
+- Original files are not moved, edited, or deleted during indexing.
 
-## Build
-The Android project uses Gradle and Android Gradle Plugin. The CI build workflow will be added in delivery stage 3.
+## Android project
+- Application ID: `com.mohamed.fileflow`
+- Minimum Android version: Android 8.0 (API 26)
+- Compile SDK: 35
+- Java: 17
+- Kotlin: 2.0.21
+- Android Gradle Plugin: 8.7.3
+
+## Build validation
+A GitHub Actions workflow runs `:app:assembleDebug` on pushes and pull requests. This workflow is for compile validation only; APK distribution is reserved for stage 3.
