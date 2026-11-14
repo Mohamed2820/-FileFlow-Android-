@@ -142,6 +142,28 @@ object FileOperations {
         }
     }
 
+    fun renameFolder(context: Context, folderTree: Uri, newName: String): FileOperationResult {
+        val name = newName.trim()
+        if (name.isBlank() || name == "." || name == ".." || name.contains('/') || name.contains('\\')) {
+            return FileOperationResult(false, message = "اسم المجلد غير صالح.")
+        }
+        return runCatching {
+            val folder = DocumentFile.fromTreeUri(context, folderTree)
+                ?: return FileOperationResult(false, message = "المجلد المحدد غير متاح.")
+            if (!folder.isDirectory || !folder.canWrite()) {
+                return FileOperationResult(false, message = "المجلد المحدد لا يسمح بإعادة التسمية.")
+            }
+            if (folder.name == name) return FileOperationResult(true, message = "لم يتغير اسم المجلد.")
+            if (!folder.renameTo(name)) {
+                FileOperationResult(false, message = "رفض مزود الملفات إعادة تسمية المجلد.")
+            } else {
+                FileOperationResult(true, message = "تمت إعادة تسمية المجلد إلى $name.")
+            }
+        }.getOrElse { error ->
+            FileOperationResult(false, message = "تعذرت إعادة تسمية المجلد: ${error.localizedMessage ?: "خطأ في الوصول"}.")
+        }
+    }
+
     fun createFolder(context: Context, parentTree: Uri, name: String): FileOperationResult {
         val folderName = name.trim()
         if (folderName.isBlank() || folderName == "." || folderName == ".." ||
