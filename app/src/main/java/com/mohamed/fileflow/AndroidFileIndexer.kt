@@ -432,7 +432,7 @@ object AndroidFileIndexer {
                                 mimeType = mime,
                                 sizeBytes = queryDocumentSize(context, child.uri) ?: -1L,
                                 modifiedSeconds = (child.lastModified().coerceAtLeast(0L)) / 1000L,
-                                category = FileClassifier.classify(name, mime),
+                                category = if (SystemFileClassifier.isSystemPath("", name)) "system" else FileClassifier.classify(name, mime),
                                 source = "saf:$treeUri"
                             )
                         }
