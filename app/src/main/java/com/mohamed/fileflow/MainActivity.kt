@@ -172,7 +172,7 @@ private fun TopHeader(
             onValueChange = onQuery,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
-            placeholder = { Text("ابحث في الأقسام...", fontSize = 13.sp) },
+            placeholder = { Text("ابحث في الأقسام والملفات المفهرسة...", fontSize = 13.sp) },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotBlank()) {
