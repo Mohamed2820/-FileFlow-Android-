@@ -361,7 +361,7 @@ private fun ArchiveScreen(
                 EmptyState(icon, message, "لن تظهر نتائج قبل ربط الهاتف وفهرسة الملفات في المرحلة الثانية.")
             }
             selected in listOf("images", "videos", "audio", "other", "empty") -> {
-                IndexedFilesContent(selected)
+                IndexedFilesContent(selected, query)
             }
             else -> {
                 EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "لن نصنّف الملفات تلقائيًا دون أدلة كافية. اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
@@ -372,7 +372,7 @@ private fun ArchiveScreen(
 
 
 @Composable
-private fun IndexedFilesContent(selected: String) {
+private fun IndexedFilesContent(selected: String, query: String) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var files by remember(selected) { mutableStateOf<List<IndexedFile>>(emptyList()) }
 
@@ -381,9 +381,13 @@ private fun IndexedFilesContent(selected: String) {
             val database = FileIndexDatabase(context)
             val all = database.allFiles()
             database.close()
-            when (selected) {
+            val categoryFiles = when (selected) {
                 "empty" -> all.filter { it.sizeBytes == 0L }
                 else -> all.filter { it.category == selected }
+            }
+            categoryFiles.filter { file ->
+                query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
+                    (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
             }.sortedBy { it.name.lowercase() }
         }
     }
@@ -429,8 +433,12 @@ private fun IndexedFilesContent(selected: String) {
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
                             context.startActivity(intent)
-                        } catch (_: Exception) {
-                            // The URI may have been revoked or no compatible viewer may be installed.
+                        } catch (error: Exception) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
                 )
@@ -483,7 +491,7 @@ private fun SettingsScreen(dark: Boolean, onTheme: (Boolean) -> Unit) {
             SettingsInfoCard(Icons.Rounded.Shield, "حماية الملفات الأصلية", "سياسة التطبيق: لا نقل ولا تعديل ولا حذف تلقائي للملفات أثناء الفهرسة.")
         }
         item {
-            SettingsInfoCard(Icons.Rounded.PhoneAndroid, "صلاحيات الوصول", "لم يتم طلب أي صلاحيات حتى الآن. ستُشرح الصلاحيات ويُطلب الإذن المناسب في المرحلة الثانية.")
+            SettingsInfoCard(Icons.Rounded.PhoneAndroid, "صلاحيات الوصول", "يمكنك منح صلاحيات الصور والفيديو والصوت، أو اختيار مجلد محدد يدويًا. يقتصر الوصول على ما تسمح به إصدارات Android ومزود الملفات.")
         }
         item {
             SettingsInfoCard(Icons.Rounded.Info, "حول FileFlow", "الإصدار 1.0.0 • تطبيق Android أصلي • التصنيف والفهرسة على الجهاز.")
