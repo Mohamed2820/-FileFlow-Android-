@@ -8,7 +8,7 @@
 - Local SQLite metadata index. Indexing does not copy, move, rename, edit, or delete source files.
 - Browsing indexed image, video, audio, and other-file categories.
 - Opening an indexed item with an Android viewer through its content URI and read grant.
-- Search within the indexed file name and MIME type from the application search field.
+- Global search across indexed file names and MIME types from the application search field.
 - Explicit empty-state messaging when a category has no indexed results.
 
 ## Access and privacy boundaries
