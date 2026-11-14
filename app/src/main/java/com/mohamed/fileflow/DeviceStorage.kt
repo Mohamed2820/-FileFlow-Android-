@@ -157,7 +157,8 @@ object AllFilesIndexer {
             MediaStore.Files.FileColumns.DISPLAY_NAME,
             MediaStore.Files.FileColumns.MIME_TYPE,
             MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.DATE_MODIFIED
+            MediaStore.Files.FileColumns.DATE_MODIFIED,
+            MediaStore.Files.FileColumns.RELATIVE_PATH
         )
         val cursor = context.contentResolver.query(
             collection, projection, null, null,
@@ -169,21 +170,48 @@ object AllFilesIndexer {
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
             val modifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_MODIFIED)
+            val relativePathCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.RELATIVE_PATH)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val mime = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol)
                 val name = cursor.getString(nameCol)?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
+                val relativePath = if (cursor.isNull(relativePathCol)) "" else cursor.getString(relativePathCol).orEmpty()
+                val systemFile = SystemFileClassifier.isSystemPath(relativePath, name)
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
                     name = name,
                     mimeType = mime,
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
-                    category = FileClassifier.classify(name, mime),
+                    category = if (systemFile) "system" else FileClassifier.classify(name, mime),
                     source = "all-files"
                 )
             }
         }
         return rows
+    }
+}
+
+
+/**
+ * Identifies OS-managed/reserved folders in shared storage only.
+ * This is not a claim that an ordinary app can enumerate Android's private
+ * /system, /vendor, /data or other protected partitions.
+ */
+object SystemFileClassifier {
+    private val reservedRoots = setOf(
+        "android/data", "android/obb", "android/media",
+        "lost.dir", ".thumbnails", "thumbnails"
+    )
+
+    fun isSystemPath(relativePath: String, displayName: String): Boolean {
+        val normalized = relativePath.replace('\\', '/').trim('/').lowercase(Locale.ROOT)
+        val segments = normalized.split('/').filter { it.isNotBlank() }
+        val first = segments.firstOrNull().orEmpty()
+        val path = segments.joinToString("/")
+        val hidden = displayName.startsWith(".") || segments.any { it.startsWith(".") }
+        val reserved = reservedRoots.any { root -> path == root || path.startsWith("$root/") }
+        val androidManaged = first == "android" && (segments.getOrNull(1) in setOf("data", "obb", "media"))
+        return hidden || reserved || androidManaged
     }
 }
