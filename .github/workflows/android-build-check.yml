@@ -2,7 +2,7 @@ name: Android build check
 
 on:
   push:
-    branches: [main, stage-1-interface-verification]
+    branches: [main, stage-1-interface-verification, stage-2/android-storage-integration]
   pull_request:
     branches: [main]
   workflow_dispatch:
