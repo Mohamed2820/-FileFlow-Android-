@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 data class DeviceStorageInfo(val total: Long, val available: Long, val used: Long)
@@ -68,16 +69,32 @@ fun formatBytes(bytes: Long): String {
 
 @Composable
 fun DeviceStorageCard() {
-    var info by remember { mutableStateOf(readDeviceStorage(context)) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var info by remember { mutableStateOf<DeviceStorageInfo?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    fun refreshStorage() {
+        scope.launch {
+            info = withContext(Dispatchers.IO) { readDeviceStorage(context) }
+        }
+    }
+
+    LaunchedEffect(Unit) { refreshStorage() }
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) info = readDeviceStorage(context)
+            if (event == Lifecycle.Event.ON_RESUME) refreshStorage()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val progress = if (info.total > 0) info.used.toFloat() / info.total else 0f
+
+    val current = info
+    val progress = if (current != null && current.total > 0L) {
+        current.used.toFloat() / current.total.toFloat()
+    } else 0f
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -89,19 +106,33 @@ fun DeviceStorageCard() {
                 Spacer(Modifier.width(8.dp))
                 Text("مساحة التخزين الداخلي", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
-                Text("تتحدث عند العودة للتطبيق", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text("قراءة من Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.height(14.dp))
-            Text(formatBytes(info.used) + " مستخدم من " + formatBytes(info.total), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("المتاح للنظام: " + formatBytes(info.available), style = MaterialTheme.typography.bodySmall)
-                Text("المستخدم: " + String.format(Locale.getDefault(), "%.0f%%", progress * 100), style = MaterialTheme.typography.bodySmall)
+            if (current == null) {
+                Text("جارٍ قراءة مساحة التخزين...", style = MaterialTheme.typography.bodyMedium)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            } else {
+                Text(
+                    formatBytes(current.used) + " مستخدم من " + formatBytes(current.total),
+                    style = MaterialTheme.typography.titleLarge
+                )
+                Spacer(Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("المتاح للنظام: " + formatBytes(current.available), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        String.format(Locale.getDefault(), "%.0f%%", progress * 100) + " مستخدم",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
             Text(
-                "مصدر القراءة: إحصاءات وحدة التخزين الداخلية في Android، مع بديل من وحدة التخزين المشتركة عند تعذر المصدر الأساسي. قد تختلف السعة القابلة للاستخدام عن الرقم المطبوع على الهاتف.",
+                "المصدر: إحصاءات وحدة التخزين الداخلية في Android. السعة المعروضة هي سعة وسيط التخزين، وقد تختلف المساحة القابلة للاستخدام عن الرقم المطبوع على الهاتف.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
