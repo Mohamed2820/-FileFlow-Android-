@@ -11,6 +11,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import android.widget.VideoView
 import android.widget.MediaController
 import android.content.ClipData
+import android.content.ContentUris
+import android.provider.MediaStore
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -477,6 +479,7 @@ private fun ArchiveScreen(
                     selected = selected,
                     query = query,
                     gridView = gridView,
+                    onGridToggle = onGridToggle,
                     selectedSubject = selectedSubject,
                     onSubjectChange = { selectedSubject = it; selectedExtension = null },
                     selectedExtension = selectedExtension,
@@ -599,12 +602,23 @@ private fun fileCategoryIcon(category: String): androidx.compose.ui.graphics.vec
         else -> Icons.Rounded.InsertDriveFile
     }
 
+private fun mediaPreviewUri(file: IndexedFile): Uri {
+    val original = Uri.parse(file.uri)
+    if (original.authority != "media" || !original.pathSegments.contains("file")) return original
+    val mediaId = original.lastPathSegment?.toLongOrNull() ?: return original
+    return when (file.category) {
+        "images" -> ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
+        "videos" -> ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
+        else -> original
+    }
+}
+
 @Composable
 private fun MediaThumbnail(file: IndexedFile, selected: String, modifier: Modifier = Modifier) {
     val context = androidx.compose.ui.platform.LocalContext.current
     AsyncImage(
         model = ImageRequest.Builder(context)
-            .data(Uri.parse(file.uri))
+            .data(mediaPreviewUri(file))
             .crossfade(true)
             .apply {
                 if (selected == "videos") {
@@ -645,6 +659,7 @@ private fun IndexedFilesContent(
     selected: String,
     query: String,
     gridView: Boolean,
+    onGridToggle: () -> Unit,
     selectedSubject: String?,
     onSubjectChange: (String?) -> Unit,
     selectedExtension: String?,
@@ -669,6 +684,9 @@ private fun IndexedFilesContent(
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var folderName by remember { mutableStateOf("") }
     var pendingFolderTree by remember { mutableStateOf<Uri?>(null) }
+    var showRenameFolderDialog by remember { mutableStateOf(false) }
+    var pendingRenameFolderTree by remember { mutableStateOf<Uri?>(null) }
+    var folderRenameValue by remember { mutableStateOf("") }
 
     BackHandler(enabled = previewFile != null || detailFile != null || selecting) {
         when {
@@ -778,6 +796,16 @@ private fun IndexedFilesContent(
         }
     }
 
+    val folderRenamePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+        if (treeUri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { context.contentResolver.takePersistableUriPermission(treeUri, flags) }
+            pendingRenameFolderTree = treeUri
+            folderRenameValue = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)?.name.orEmpty()
+            showRenameFolderDialog = true
+        }
+    }
+
     if (previewFile != null) {
         MediaPreviewScreen(file = previewFile!!, onBack = { previewFile = null })
         return
@@ -848,9 +876,16 @@ private fun IndexedFilesContent(
                     Icon(Icons.Rounded.CreateNewFolder, null, modifier = Modifier.size(16.dp))
                     Text("مجلد جديد", fontSize = 10.sp)
                 }
+                TextButton(onClick = { folderRenamePicker.launch(null) }) {
+                    Icon(Icons.Rounded.Folder, null, modifier = Modifier.size(16.dp))
+                    Text("تسمية مجلد", fontSize = 10.sp)
+                }
                 TextButton(onClick = { selecting = true }) {
                     Icon(Icons.Rounded.Checklist, null, modifier = Modifier.size(16.dp))
                     Text("تحديد", fontSize = 10.sp)
+                }
+                IconButton(onClick = onGridToggle, modifier = Modifier.size(34.dp)) {
+                    Icon(if (gridView) Icons.Rounded.ViewList else Icons.Rounded.GridView, contentDescription = "تغيير طريقة العرض", modifier = Modifier.size(19.dp))
                 }
                 Box {
                     IconButton(onClick = { sortMenuExpanded = true }, modifier = Modifier.size(34.dp)) {
@@ -1101,6 +1136,33 @@ private fun IndexedFilesContent(
             dismissButton = { TextButton(onClick = { showCreateFolderDialog = false }) { Text("إلغاء") } }
         )
     }
+
+    if (showRenameFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameFolderDialog = false },
+            title = { Text("إعادة تسمية المجلد المحدد") },
+            text = {
+                OutlinedTextField(
+                    value = folderRenameValue,
+                    onValueChange = { folderRenameValue = it },
+                    singleLine = true,
+                    label = { Text("اسم المجلد الجديد") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val tree = pendingRenameFolderTree
+                    val name = folderRenameValue
+                    showRenameFolderDialog = false
+                    if (tree != null) scope.launch {
+                        val result = withContext(Dispatchers.IO) { FileOperations.renameFolder(context, tree, name) }
+                        actionStatus = result.message
+                    }
+                }) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { showRenameFolderDialog = false }) { Text("إلغاء") } }
+        )
+    }
 }
 
 private fun openFileExternally(context: android.content.Context, file: IndexedFile) {
@@ -1164,7 +1226,7 @@ private fun MediaPreviewScreen(file: IndexedFile, onBack: () -> Unit) {
                         val controls = MediaController(ctx)
                         controls.setAnchorView(player)
                         setMediaController(controls)
-                        setVideoURI(Uri.parse(file.uri))
+                        setVideoURI(mediaPreviewUri(file))
                         setOnPreparedListener { mediaPlayer -> mediaPlayer.start() }
                     }
                 },
