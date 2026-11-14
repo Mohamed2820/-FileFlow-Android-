@@ -1,6 +1,8 @@
 package com.mohamed.fileflow
 
+import android.app.Activity
 import android.content.Intent
+import androidx.activity.result.IntentSenderRequest
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
@@ -155,6 +157,7 @@ private fun FileFlowApp() {
     var categoryName by remember { mutableStateOf("") }
     var showCategoryEditor by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val appScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { restoreCategories(context) }
 
@@ -260,6 +263,22 @@ private fun FileFlowApp() {
                                 TextButton(onClick = { moveCategory(current.id, -1) }) { Text("نقل للأعلى") }
                                 TextButton(onClick = { moveCategory(current.id, 1) }) { Text("نقل للأسفل") }
                             }
+                            if (current.id.startsWith("custom_")) {
+                                TextButton(onClick = {
+                                    appScope.launch {
+                                        withContext(Dispatchers.IO) {
+                                            val db = FileIndexDatabase(context)
+                                            try {
+                                                val affected = db.allFiles().filter { it.category == current.id }.map { it.uri }
+                                                db.updateCategory(affected, "other")
+                                            } finally { db.close() }
+                                        }
+                                        categories.removeAll { it.id == current.id }
+                                        saveCategories(context)
+                                        showCategoryEditor = false
+                                    }
+                                }) { Text("حذف القسم ونقل ملفاته إلى «أخرى»", color = MaterialTheme.colorScheme.error) }
+                            }
                         }
                     }
                 },
@@ -340,6 +359,7 @@ private fun TopHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeScreen(
     onNavigate: (String) -> Unit,
@@ -463,6 +483,7 @@ private fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CategoryCard(
     category: FileCategory,
@@ -843,6 +864,60 @@ private fun IndexedFilesContent(
     var showRenameFolderDialog by remember { mutableStateOf(false) }
     var pendingRenameFolderTree by remember { mutableStateOf<Uri?>(null) }
     var folderRenameValue by remember { mutableStateOf("") }
+    var showAssignCategoryDialog by remember { mutableStateOf(false) }
+    var pendingMediaRename by remember { mutableStateOf<Pair<IndexedFile, String>?>(null) }
+    var pendingMediaDelete by remember { mutableStateOf<List<IndexedFile>?>(null) }
+
+    fun executeRename(target: IndexedFile, newName: String) {
+        scope.launch {
+            val result = withContext(Dispatchers.IO) { FileOperations.rename(context, target, newName) }
+            if (result.success && result.file != null) {
+                withContext(Dispatchers.IO) {
+                    val db = FileIndexDatabase(context)
+                    try {
+                        db.deleteFiles(listOf(target.uri))
+                        db.upsertFiles(listOf(result.file))
+                    } finally { db.close() }
+                }
+                actionStatus = result.message
+                refreshKey++
+            } else actionStatus = result.message
+            selectedUris.clear()
+            selecting = false
+        }
+    }
+
+    fun executeDelete(toDelete: List<IndexedFile>) {
+        scope.launch {
+            val results = withContext(Dispatchers.IO) { toDelete.map { it to FileOperations.delete(context, it) } }
+            withContext(Dispatchers.IO) {
+                val db = FileIndexDatabase(context)
+                try { db.deleteFiles(results.filter { it.second.success }.map { it.first.uri }) }
+                finally { db.close() }
+            }
+            val done = results.count { it.second.success }
+            actionStatus = "تم حذف $done من ${toDelete.size} ملف من الهاتف."
+            results.firstOrNull { !it.second.success }?.let { actionStatus += " ${it.second.message}" }
+            selectedUris.clear()
+            selecting = false
+            refreshKey++
+        }
+    }
+
+    val mediaMutationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val rename = pendingMediaRename
+        val deletion = pendingMediaDelete
+        pendingMediaRename = null
+        pendingMediaDelete = null
+        if (result.resultCode == Activity.RESULT_OK) {
+            if (rename != null) executeRename(rename.first, rename.second)
+            if (deletion != null) executeDelete(deletion)
+        } else {
+            actionStatus = "لم تتم الموافقة من Android؛ لم يتم تعديل الملفات."
+        }
+    }
 
     BackHandler(enabled = previewFile != null || detailFile != null || selecting) {
         when {
@@ -1007,6 +1082,10 @@ private fun IndexedFilesContent(
                         Icon(Icons.Rounded.Edit, null, modifier = Modifier.size(16.dp))
                         Text("تسمية", fontSize = 10.sp)
                     }
+                }
+                TextButton(onClick = { showAssignCategoryDialog = true }) {
+                    Icon(Icons.Rounded.Folder, null, modifier = Modifier.size(16.dp))
+                    Text("القسم", fontSize = 10.sp)
                 }
                 TextButton(onClick = {
                     val uris = selectedFiles.map { Uri.parse(it.uri) }
@@ -1217,6 +1296,43 @@ private fun IndexedFilesContent(
         }
     }
 
+    if (showAssignCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showAssignCategoryDialog = false },
+            title = { Text("نقل الملفات إلى قسم") },
+            text = {
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    categories.forEach { target ->
+                        TextButton(
+                            onClick = {
+                                showAssignCategoryDialog = false
+                                val uris = selectedUris.toList()
+                                scope.launch {
+                                    withContext(Dispatchers.IO) {
+                                        val db = FileIndexDatabase(context)
+                                        try { db.updateCategory(uris, target.id) }
+                                        finally { db.close() }
+                                    }
+                                    files = files.map { if (it.uri in uris) it.copy(category = target.id) else it }
+                                    actionStatus = "تم نقل الملفات إلى قسم «${target.title}» داخل FileFlow."
+                                    selectedUris.clear()
+                                    selecting = false
+                                    refreshKey++
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(target.icon, null, tint = target.tint)
+                            Spacer(Modifier.width(8.dp))
+                            Text(target.title)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showAssignCategoryDialog = false }) { Text("إغلاق") } }
+        )
+    }
+
     if (showRenameDialog) {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
@@ -1232,22 +1348,14 @@ private fun IndexedFilesContent(
             confirmButton = {
                 TextButton(onClick = {
                     val target = renameTarget
+                    val newName = renameValue
                     showRenameDialog = false
-                    if (target != null) scope.launch {
-                        val result = withContext(Dispatchers.IO) { FileOperations.rename(context, target, renameValue) }
-                        if (result.success && result.file != null) {
-                            withContext(Dispatchers.IO) {
-                                val db = FileIndexDatabase(context)
-                                try {
-                                    db.deleteFiles(listOf(target.uri))
-                                    db.upsertFiles(listOf(result.file))
-                                } finally { db.close() }
-                            }
-                            actionStatus = result.message
-                            refreshKey++
-                        } else actionStatus = result.message
-                        selectedUris.clear()
-                        selecting = false
+                    if (target != null) {
+                        val sender = FileOperations.mediaWriteRequest(context, target)
+                        if (sender != null) {
+                            pendingMediaRename = target to newName
+                            mediaMutationLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                        } else executeRename(target, newName)
                     }
                 }) { Text("حفظ") }
             },
@@ -1264,20 +1372,11 @@ private fun IndexedFilesContent(
                 TextButton(onClick = {
                     showDeleteDialog = false
                     val toDelete = selectedFiles
-                    scope.launch {
-                        val results = withContext(Dispatchers.IO) { toDelete.map { it to FileOperations.delete(context, it) } }
-                        withContext(Dispatchers.IO) {
-                            val db = FileIndexDatabase(context)
-                            try { db.deleteFiles(results.filter { it.second.success }.map { it.first.uri }) }
-                            finally { db.close() }
-                        }
-                        val done = results.count { it.second.success }
-                        actionStatus = "تم حذف $done من ${toDelete.size} ملف."
-                        results.firstOrNull { !it.second.success }?.let { actionStatus += " ${it.second.message}" }
-                        selectedUris.clear()
-                        selecting = false
-                        refreshKey++
-                    }
+                    val sender = FileOperations.mediaDeleteRequest(context, toDelete)
+                    if (sender != null) {
+                        pendingMediaDelete = toDelete
+                        mediaMutationLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                    } else executeDelete(toDelete)
                 }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("إلغاء") } }
