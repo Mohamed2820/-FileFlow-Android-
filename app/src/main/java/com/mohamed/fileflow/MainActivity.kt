@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
@@ -311,7 +312,7 @@ private fun ArchiveScreen(
 
         when {
             selected == "all" && query.isNotBlank() -> {
-                IndexedSearchResults(query)
+                IndexedSearchResults(query, onCategory)
             }
             selected == "all" -> {
                 if (filtered.isEmpty()) {
@@ -358,7 +359,7 @@ private fun ArchiveScreen(
                 EmptyState(icon, message, "لن تظهر نتائج قبل ربط الهاتف وفهرسة الملفات في المرحلة الثانية.")
             }
             selected in listOf("images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
-                IndexedFilesContent(selected, query)
+                IndexedFilesContent(selected, query, gridView)
             }
             else -> {
                 EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "لن نصنّف الملفات تلقائيًا دون أدلة كافية. اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
@@ -369,77 +370,156 @@ private fun ArchiveScreen(
 
 
 @Composable
-private fun IndexedSearchResults(query: String) {
+private fun IndexedSearchResults(query: String, onCategory: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var files by remember(query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
+    val matchingCategories = remember(query) {
+        categories.filter { category ->
+            category.title.contains(query.trim(), ignoreCase = true) ||
+                category.subtitle.contains(query.trim(), ignoreCase = true)
+        }
+    }
 
     LaunchedEffect(query) {
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
-            val all = database.allFiles()
-            database.close()
-            all.filter { file ->
-                file.name.contains(query.trim(), ignoreCase = true) ||
-                    (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
-            }.sortedBy { it.name.lowercase() }
+            try {
+                database.allFiles().filter { file ->
+                    file.name.contains(query.trim(), ignoreCase = true) ||
+                        (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
+                }.sortedBy { it.name.lowercase() }
+            } finally {
+                database.close()
+            }
         }
     }
 
-    if (files.isEmpty()) {
-        EmptyState(Icons.Rounded.SearchOff, "لا توجد ملفات مطابقة", "تأكد من فهرسة الوسائط أو اختيار مجلد يحتوي على ملفات.")
+    fun openFile(file: IndexedFile) {
+        try {
+            val uri = Uri.parse(file.uri)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, file.mimeType ?: "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        } catch (error: Exception) {
+            android.widget.Toast.makeText(
+                context,
+                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    if (files.isEmpty() && matchingCategories.isEmpty()) {
+        EmptyState(Icons.Rounded.SearchOff, "لا توجد نتائج مطابقة", "ابحث باسم قسم أو اسم ملف أو نوعه.")
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
         ) {
-            items(files, key = { it.uri }) { file ->
-                ListItem(
-                    headlineContent = { Text(file.name, maxLines = 1) },
-                    supportingContent = {
-                        Text("${file.category} • ${file.mimeType ?: "نوع غير معروف"} • ${if (file.sizeBytes < 0L) "حجم غير معروف" else "${file.sizeBytes} بايت"}", color = muted, fontSize = 11.sp)
-                    },
-                    leadingContent = { Icon(Icons.Rounded.InsertDriveFile, contentDescription = null, tint = brand) },
-                    modifier = Modifier.clickable {
-                        try {
-                            val uri = Uri.parse(file.uri)
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, file.mimeType ?: "*/*")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(intent)
-                        } catch (error: Exception) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            if (matchingCategories.isNotEmpty()) {
+                item {
+                    Text(
+                        "الأقسام",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                items(matchingCategories, key = { "category:${it.id}" }) { category ->
+                    ListItem(
+                        headlineContent = { Text(category.title, fontWeight = FontWeight.SemiBold) },
+                        supportingContent = { Text(category.subtitle, color = muted, fontSize = 12.sp) },
+                        leadingContent = { Icon(category.icon, null, tint = category.tint) },
+                        trailingContent = { Icon(Icons.Rounded.ChevronLeft, null, tint = muted) },
+                        modifier = Modifier.clickable { onCategory(category.id) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+            if (files.isNotEmpty()) {
+                item {
+                    Text(
+                        "الملفات",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+                items(files, key = { it.uri }) { file ->
+                    ListItem(
+                        headlineContent = { Text(file.name, maxLines = 1) },
+                        supportingContent = {
+                            Text(
+                                "${file.category} • ${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
+                                color = muted,
+                                fontSize = 11.sp
+                            )
+                        },
+                        leadingContent = { Icon(fileCategoryIcon(file.category), null, tint = brand) },
+                        modifier = Modifier.clickable { openFile(file) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
             }
         }
     }
 }
 
+private fun fileCategoryIcon(category: String): androidx.compose.ui.graphics.vector.ImageVector =
+    when (category) {
+        "images" -> Icons.Rounded.Image
+        "videos" -> Icons.Rounded.PlayCircle
+        "audio" -> Icons.Rounded.MusicNote
+        "documents" -> Icons.Rounded.Description
+        "archives" -> Icons.Rounded.FolderZip
+        "code" -> Icons.Rounded.Code
+        "installers" -> Icons.Rounded.Android
+        else -> Icons.Rounded.InsertDriveFile
+    }
+
 @Composable
-private fun IndexedFilesContent(selected: String, query: String) {
+private fun MediaThumbnail(file: IndexedFile, selected: String, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    AsyncImage(
+        model = ImageRequest.Builder(context)
+            .data(Uri.parse(file.uri))
+            .crossfade(true)
+            .apply { if (selected == "videos") videoFrameMillis(1000L) }
+            .build(),
+        contentDescription = file.name,
+        placeholder = painterResource(R.drawable.ic_media_placeholder),
+        error = painterResource(R.drawable.ic_media_placeholder),
+        fallback = painterResource(R.drawable.ic_media_placeholder),
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+    )
+}
+
+@Composable
+private fun IndexedFilesContent(selected: String, query: String, gridView: Boolean) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var files by remember(selected, query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
 
     LaunchedEffect(selected, query) {
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
-            val all = database.allFiles()
-            database.close()
-            val categoryFiles = when (selected) {
-                "empty" -> all.filter { it.sizeBytes == 0L }
-                else -> all.filter { it.category == selected }
+            try {
+                val all = database.allFiles()
+                val categoryFiles = when (selected) {
+                    "empty" -> all.filter { it.sizeBytes == 0L }
+                    else -> all.filter { it.category == selected }
+                }
+                categoryFiles.filter { file ->
+                    query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
+                        (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
+                }.sortedBy { it.name.lowercase() }
+            } finally {
+                database.close()
             }
-            categoryFiles.filter { file ->
-                query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
-                    (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
-            }.sortedBy { it.name.lowercase() }
         }
     }
 
@@ -466,7 +546,7 @@ private fun IndexedFilesContent(selected: String, query: String) {
             "لا توجد ملفات مفهرسة في هذا القسم",
             "ارجع للرئيسية وحدّث فهرسة الملفات، ثم افتح القسم مرة أخرى."
         )
-    } else if (selected == "images" || selected == "videos") {
+    } else if ((selected == "images" || selected == "videos") && gridView) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier.fillMaxSize(),
@@ -479,21 +559,43 @@ private fun IndexedFilesContent(selected: String, query: String) {
                     modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context)
-                            .data(Uri.parse(file.uri))
-                            .crossfade(true)
-                            .apply { if (selected == "videos") videoFrameMillis(1000) }
-                            .build(),
-                        contentDescription = file.name,
-                        contentScale = ContentScale.Crop,
+                    MediaThumbnail(
+                        file = file,
+                        selected = selected,
                         modifier = Modifier.fillMaxWidth().aspectRatio(1f)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(file.name, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground)
                     Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 10.sp, color = muted)
+                }
+            }
+        }
+    } else if (gridView) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 148.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            gridItems(files, key = { it.uri }) { file ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Icon(fileCategoryIcon(file.category), null, tint = brand, modifier = Modifier.size(30.dp))
+                        Spacer(Modifier.height(10.dp))
+                        Text(file.name, maxLines = 2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
+                            maxLines = 2,
+                            fontSize = 10.sp,
+                            color = muted
+                        )
+                    }
                 }
             }
         }
@@ -513,18 +615,15 @@ private fun IndexedFilesContent(selected: String, query: String) {
                         )
                     },
                     leadingContent = {
-                        Icon(
-                            when (file.category) {
-                                "audio" -> Icons.Rounded.MusicNote
-                                "documents" -> Icons.Rounded.Description
-                                "archives" -> Icons.Rounded.FolderZip
-                                "code" -> Icons.Rounded.Code
-                                "installers" -> Icons.Rounded.Android
-                                else -> Icons.Rounded.InsertDriveFile
-                            },
-                            contentDescription = null,
-                            tint = brand
-                        )
+                        if (selected == "images" || selected == "videos") {
+                            MediaThumbnail(
+                                file = file,
+                                selected = selected,
+                                modifier = Modifier.size(58.dp)
+                            )
+                        } else {
+                            Icon(fileCategoryIcon(file.category), null, tint = brand)
+                        }
                     },
                     modifier = Modifier.clickable { openFile(file) }
                 )
