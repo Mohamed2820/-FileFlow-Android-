@@ -374,6 +374,9 @@ private fun ArchiveScreen(
     val category = categories.firstOrNull { it.id == selected }
     var selectedSubject by remember(selected) { mutableStateOf<String?>(null) }
     var selectedExtension by remember(selected, selectedSubject) { mutableStateOf<String?>(null) }
+    BackHandler(enabled = selectedExtension != null || selectedSubject != null) {
+        if (selectedExtension != null) selectedExtension = null else selectedSubject = null
+    }
     val title = when (selected) {
         "all" -> "كل الأقسام"
         "recent" -> "الأخيرة"
@@ -1213,7 +1216,7 @@ private fun MediaPreviewScreen(file: IndexedFile, onBack: () -> Unit) {
         }
         if (file.category == "images") {
             AsyncImage(
-                model = ImageRequest.Builder(context).data(Uri.parse(file.uri)).crossfade(true).build(),
+                model = ImageRequest.Builder(context).data(mediaPreviewUri(file)).crossfade(true).build(),
                 contentDescription = file.name,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth().weight(1f)
