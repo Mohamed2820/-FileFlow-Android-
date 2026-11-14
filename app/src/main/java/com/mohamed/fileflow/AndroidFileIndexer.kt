@@ -29,6 +29,11 @@ data class IndexedFile(
     val source: String
 )
 
+data class TreeScanResult(
+    val files: List<IndexedFile>,
+    val skippedEntries: Int
+)
+
 class FileIndexDatabase(context: Context) :
     SQLiteOpenHelper(context, "fileflow-index.db", null, 1) {
 
@@ -215,9 +220,11 @@ object AndroidFileIndexer {
         }
     }
 
-    fun scanPickedTree(context: Context, treeUri: Uri): List<IndexedFile> {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+    fun scanPickedTree(context: Context, treeUri: Uri): TreeScanResult {
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+            ?: return TreeScanResult(emptyList(), skippedEntries = 1)
         val rows = mutableListOf<IndexedFile>()
+        var skippedEntries = 0
         val visitedDirectories = mutableSetOf<String>()
         val pending = ArrayDeque<DocumentFile>()
         pending.addLast(root)
@@ -231,8 +238,10 @@ object AndroidFileIndexer {
             val children = try {
                 directory.listFiles()
             } catch (_: SecurityException) {
+                skippedEntries++
                 continue
             } catch (_: Exception) {
+                skippedEntries++
                 continue
             }
 
@@ -255,12 +264,12 @@ object AndroidFileIndexer {
                         }
                     }
                 } catch (_: SecurityException) {
-                    // Skip this child; the rest of the selected tree can still be indexed.
+                    skippedEntries++
                 } catch (_: Exception) {
-                    // Providers can invalidate documents while enumeration is running.
+                    skippedEntries++
                 }
             }
         }
-        return rows
+        return TreeScanResult(rows, skippedEntries)
     }
 }
