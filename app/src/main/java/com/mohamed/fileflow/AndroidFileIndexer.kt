@@ -209,6 +209,17 @@ class FileIndexDatabase(context: Context) :
 
     fun moveCustomCategory(id: String, parentId: String?) {
         if (parentId == id) return
+        var ancestor = parentId
+        val visited = mutableSetOf<String>()
+        while (ancestor != null && visited.add(ancestor)) {
+            if (ancestor == id) return // Prevent moving a category inside one of its descendants.
+            ancestor = readableDatabase.query(
+                "custom_categories", arrayOf("parent_id"), "id = ?", arrayOf(ancestor),
+                null, null, null
+            ).use { cursor ->
+                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
+            }
+        }
         writableDatabase.update(
             "custom_categories",
             ContentValues().apply { if (parentId == null) putNull("parent_id") else put("parent_id", parentId) },
