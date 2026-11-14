@@ -35,7 +35,7 @@ data class TreeScanResult(
 )
 
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 2) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -56,7 +56,7 @@ class FileIndexDatabase(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 2) {
+        if (oldVersion < 3) {
             // Reclassify indexed metadata using semantic filename rules.
             // Collect first, then update after closing the read cursor.
             val rows = mutableListOf<Triple<String, String, String?>>()
@@ -77,8 +77,10 @@ class FileIndexDatabase(context: Context) :
                 }
             }
             rows.forEach { (uri, name, mime) ->
+                val decodedName = android.net.Uri.decode(name)
                 val values = ContentValues().apply {
-                    put("category", FileClassifier.classify(name, mime))
+                    put("name", decodedName)
+                    put("category", FileClassifier.classify(decodedName, mime))
                 }
                 db.update("indexed_files", values, "uri = ?", arrayOf(uri))
             }
