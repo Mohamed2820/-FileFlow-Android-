@@ -30,7 +30,14 @@ object FileClassifier {
         "اقتصاد زراعي" to listOf("اقتصاد زراعي", "agricultural economics", "agri economics"),
         "فاكهة" to listOf("فاكهة", "فاكهه", "pomology", "fruit"),
         "ميكنة" to listOf("ميكنة", "ميكنه", "mechanization", "agricultural machinery"),
-        "تقسيم نبات" to listOf("تقسيم نبات", "تصنيف نبات", "plant taxonomy", "plant classification")
+        "تقسيم نبات" to listOf("تقسيم نبات", "تصنيف نبات", "plant taxonomy", "plant classification"),
+        "بيوتكنولوجي" to listOf("بيوتكنولوجي", "تقنية حيوية", "biotechnology", "biotech"),
+        "هندسة وراثية" to listOf("هندسة وراثية", "genetic engineering"),
+        "زراعة أنسجة" to listOf("زراعة أنسجة", "زراعة انسجة", "tissue culture", "plant tissue"),
+        "مناعة" to listOf("مناعة", "مناعه", "immunology", "immune system"),
+        "علم الحيوان" to listOf("علم الحيوان", "حيوان", "zoology", "animal science"),
+        "معلوماتية حيوية" to listOf("معلوماتية حيوية", "bioinformatics"),
+        "أحياء دقيقة" to listOf("أحياء دقيقة", "احياء دقيقه", "microbiology", "microbial")
     )
 
     fun studySubject(name: String): String? {
