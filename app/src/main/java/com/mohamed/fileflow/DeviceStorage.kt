@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Environment
 import android.os.StatFs
+import android.os.storage.StorageManager
+import android.app.usage.StorageStatsManager
 import android.provider.MediaStore
 import android.content.ContentUris
 import androidx.core.content.ContextCompat
@@ -26,10 +28,32 @@ import java.util.Locale
 
 data class DeviceStorageInfo(val total: Long, val available: Long, val used: Long)
 
-fun readDeviceStorage(): DeviceStorageInfo {
-    val stat = StatFs(Environment.getDataDirectory().absolutePath)
-    val total = stat.totalBytes
-    val available = stat.availableBytes
+fun readDeviceStorage(context: Context): DeviceStorageInfo {
+    // UUID_DEFAULT represents the device's primary internal storage volume.
+    // Unlike /data's raw filesystem statistics, StorageStatsManager reports
+    // the Android storage volume used by the user's shared files and apps.
+    val statsManager = context.getSystemService(StorageStatsManager::class.java)
+    if (statsManager != null) {
+        try {
+            val total = statsManager.getTotalBytes(StorageManager.UUID_DEFAULT)
+            val available = statsManager.getFreeBytes(StorageManager.UUID_DEFAULT).coerceIn(0L, total)
+            if (total > 0L) {
+                return DeviceStorageInfo(
+                    total = total,
+                    available = available,
+                    used = (total - available).coerceAtLeast(0L)
+                )
+            }
+        } catch (_: Exception) {
+            // Fall back to the primary shared-storage filesystem if the
+            // platform provider cannot report volume statistics.
+        }
+    }
+
+    val primaryStorage = Environment.getExternalStorageDirectory()
+    val stat = StatFs(primaryStorage.absolutePath)
+    val total = stat.totalBytes.coerceAtLeast(0L)
+    val available = stat.availableBytes.coerceIn(0L, total)
     return DeviceStorageInfo(total, available, (total - available).coerceAtLeast(0L))
 }
 
@@ -44,11 +68,11 @@ fun formatBytes(bytes: Long): String {
 
 @Composable
 fun DeviceStorageCard() {
-    var info by remember { mutableStateOf(readDeviceStorage()) }
+    var info by remember { mutableStateOf(readDeviceStorage(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) info = readDeviceStorage()
+            if (event == Lifecycle.Event.ON_RESUME) info = readDeviceStorage(context)
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -73,11 +97,11 @@ fun DeviceStorageCard() {
             LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("المتاح: " + formatBytes(info.available), style = MaterialTheme.typography.bodySmall)
+                Text("المتاح للنظام: " + formatBytes(info.available), style = MaterialTheme.typography.bodySmall)
                 Text("المستخدم: " + String.format(Locale.getDefault(), "%.0f%%", progress * 100), style = MaterialTheme.typography.bodySmall)
             }
             Text(
-                "تعرض هذه القراءة سعة التخزين الداخلي الذي يقدمه Android؛ وحدات USB أو بطاقات التخزين المنفصلة لا تُعرض كسعات مستقلة هنا.",
+                "مصدر القراءة: إحصاءات وحدة التخزين الداخلية في Android، مع بديل من وحدة التخزين المشتركة عند تعذر المصدر الأساسي. قد تختلف السعة القابلة للاستخدام عن الرقم المطبوع على الهاتف.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
