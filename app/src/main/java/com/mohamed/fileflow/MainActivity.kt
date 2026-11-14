@@ -1,6 +1,16 @@
 package com.mohamed.fileflow
 
 import android.content.Intent
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.widget.VideoView
+import android.widget.MediaController
+import android.content.ClipData
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -260,25 +270,8 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         item { StorageAccessPanel() }
         item { DeviceStorageCard() }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("الأقسام الرئيسية", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onNavigate("all") }) { Text("عرض الكل") }
-            }
-        }
-        items(tileCategories.chunked(3)) { rowCategories ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                rowCategories.forEach { category ->
-                    CategoryCard(
-                        category = category,
-                        modifier = Modifier.weight(1f),
-                        count = counts[category.id]
-                    ) { onCategory(category.id) }
-                }
-                repeat(3 - rowCategories.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-        item {
             Text("التصنيف الذكي", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text("تنظيم حسب معنى اسم الملف ومادته، وليس امتداده فقط", color = muted, fontSize = 11.sp)
         }
         items(wideCategories) { category ->
             Card(
@@ -301,6 +294,22 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                     counts[category.id]?.let { Text("$it", color = category.tint, fontWeight = FontWeight.Bold) }
                     Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
                 }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("الأقسام والملفات", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onNavigate("all") }) { Text("عرض الكل") }
+            }
+        }
+        items(tileCategories.chunked(3)) { rowCategories ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowCategories.forEach { category ->
+                    CategoryCard(category = category, modifier = Modifier.weight(1f), count = counts[category.id]) {
+                        onCategory(category.id)
+                    }
+                }
+                repeat(3 - rowCategories.size) { Spacer(Modifier.weight(1f)) }
             }
         }
         item {
@@ -361,11 +370,13 @@ private fun ArchiveScreen(
     onSortToggle: () -> Unit
 ) {
     val category = categories.firstOrNull { it.id == selected }
+    var selectedSubject by remember(selected) { mutableStateOf<String?>(null) }
+    var selectedExtension by remember(selected, selectedSubject) { mutableStateOf<String?>(null) }
     val title = when (selected) {
         "all" -> "كل الأقسام"
-        "recent" -> "الملفات الأخيرة"
+        "recent" -> "الأخيرة"
         "favorites" -> "المفضلة"
-        "duplicates" -> "الملفات المتكررة"
+        "duplicates" -> "المكررات"
         else -> category?.title ?: "الأرشيف"
     }
     val filtered = categories.filter {
@@ -374,59 +385,75 @@ private fun ArchiveScreen(
     }.let { if (sortByName) it.sortedBy(FileCategory::title) else it }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
-                Column(Modifier.weight(1f)) {
-                    Text(if (category == null) "الأرشيف الذكي" else "الأرشيف / " + category.title, color = brand, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 1.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = {
+                when {
+                    selectedExtension != null -> selectedExtension = null
+                    selectedSubject != null -> selectedSubject = null
+                    else -> onBack()
                 }
+            }) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
+            Text("الأرشيف", color = brand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            if (category != null || selected == "all") {
+                Text("  /  ", color = muted)
+                Text(category?.title ?: title, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
             }
-            if (category != null) {
-                Spacer(Modifier.height(5.dp))
-                Text(category.description, color = muted, fontSize = 12.sp)
+            selectedSubject?.let {
+                Text("  /  ", color = muted)
+                Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (selected == "all") "الأقسام المتاحة" else "المحتوى", color = muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                if (selected == "all") {
-                    TextButton(onClick = onSortToggle) {
-                        Icon(Icons.Rounded.SortByAlpha, null, modifier = Modifier.size(17.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (sortByName) "أبجدي" else "الترتيب الأصلي")
-                    }
-                }
-                IconButton(onClick = onGridToggle) {
-                    Icon(if (gridView) Icons.Rounded.ViewList else Icons.Rounded.GridView, contentDescription = "تغيير طريقة العرض")
-                }
+            selectedExtension?.let {
+                Text("  /  ", color = muted)
+                Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
             }
         }
 
         when {
-            selected == "all" && query.isNotBlank() -> {
-                IndexedSearchResults(query, onCategory)
-            }
+            selected == "all" && query.isNotBlank() -> IndexedSearchResults(query, onCategory)
             selected == "all" -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("الأقسام المتاحة", color = muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onSortToggle) {
+                        Icon(Icons.Rounded.SortByAlpha, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(3.dp))
+                        Text(if (sortByName) "أبجدي" else "الترتيب الأصلي")
+                    }
+                    IconButton(onClick = onGridToggle) {
+                        Icon(if (gridView) Icons.Rounded.ViewList else Icons.Rounded.GridView, contentDescription = "تغيير العرض")
+                    }
+                }
                 if (filtered.isEmpty()) {
                     EmptyState(Icons.Rounded.SearchOff, "لا توجد أقسام مطابقة", "جرّب كلمة بحث مختلفة.")
                 } else if (gridView) {
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 3.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(filtered.chunked(2)) { pair ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                                 pair.forEach { CategoryCard(it, Modifier.weight(1f)) { onCategory(it.id) } }
                                 if (pair.size == 1) Spacer(Modifier.weight(1f))
                             }
                         }
                     }
                 } else {
-                    LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+                    LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp)) {
                         items(filtered) { item ->
                             ListItem(
                                 headlineContent = { Text(item.title, fontWeight = FontWeight.SemiBold) },
-                                supportingContent = { Text(item.subtitle, color = muted, fontSize = 12.sp) },
+                                supportingContent = { Text(item.subtitle, color = muted, fontSize = 11.sp) },
                                 leadingContent = {
-                                    Surface(shape = RoundedCornerShape(11.dp), color = item.tint.copy(alpha = 0.13f)) {
-                                        Icon(item.icon, null, tint = item.tint, modifier = Modifier.padding(9.dp))
+                                    Surface(shape = RoundedCornerShape(10.dp), color = item.tint.copy(alpha = 0.13f)) {
+                                        Icon(item.icon, null, tint = item.tint, modifier = Modifier.padding(8.dp))
                                     }
                                 },
                                 trailingContent = { Icon(Icons.Rounded.ChevronLeft, null, tint = muted) },
@@ -443,23 +470,23 @@ private fun ArchiveScreen(
                     "favorites" -> Icons.Rounded.StarBorder
                     else -> Icons.Rounded.ContentCopy
                 }
-                val message = when (selected) {
-                    "recent" -> "لا توجد ملفات حديثة"
-                    "favorites" -> "قائمة المفضلة فارغة"
-                    else -> "لم يتم فحص الملفات المتكررة بعد"
-                }
-                EmptyState(icon, message, "لن تظهر نتائج قبل ربط الهاتف وفهرسة الملفات في المرحلة الثانية.")
+                EmptyState(icon, "القسم غير مربوط بعد", "يلزم تنفيذ سجل الاستخدام والمفضلة وفحص بصمات التكرار قبل عرض نتائج حقيقية.")
             }
             selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
-                IndexedFilesContent(selected, query, gridView)
+                IndexedFilesContent(
+                    selected = selected,
+                    query = query,
+                    gridView = gridView,
+                    selectedSubject = selectedSubject,
+                    onSubjectChange = { selectedSubject = it; selectedExtension = null },
+                    selectedExtension = selectedExtension,
+                    onExtensionChange = { selectedExtension = it }
+                )
             }
-            else -> {
-                EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "لن نصنّف الملفات تلقائيًا دون أدلة كافية. اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
-            }
+            else -> EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
         }
     }
 }
-
 
 @Composable
 private fun IndexedSearchResults(query: String, onCategory: (String) -> Unit) {
