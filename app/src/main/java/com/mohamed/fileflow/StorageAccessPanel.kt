@@ -57,7 +57,7 @@ fun StorageAccessPanel() {
                 val files = withContext(Dispatchers.IO) {
                     AndroidFileIndexer.scanMedia(context)
                 }
-                withContext(Dispatchers.IO) {
+                val count = withContext(Dispatchers.IO) {
                     val database = FileIndexDatabase(context)
                     if (AndroidFileIndexer.hasImageAccess(context)) {
                         database.replaceSource("image", files.filter { it.source == "image" })
@@ -68,9 +68,11 @@ fun StorageAccessPanel() {
                     if (AndroidFileIndexer.hasAudioAccess(context)) {
                         database.replaceSource("audio", files.filter { it.source == "audio" })
                     }
-                    indexedCount = database.allFiles().size
+                    val total = database.allFiles().size
                     database.close()
+                    total
                 }
+                indexedCount = count
                 status = "اكتمل فحص الوسائط المسموح بها. عدد العناصر المفهرسة: ${files.size}"
             } catch (error: Exception) {
                 status = "تعذر إكمال الفهرسة: ${error.localizedMessage ?: "خطأ غير معروف"}"
@@ -105,12 +107,14 @@ fun StorageAccessPanel() {
                         val files = withContext(Dispatchers.IO) {
                             AndroidFileIndexer.scanPickedTree(context, uri)
                         }
-                        withContext(Dispatchers.IO) {
+                        val count = withContext(Dispatchers.IO) {
                             val database = FileIndexDatabase(context)
                             database.replaceSource("saf:${uri}", files)
-                            indexedCount = database.allFiles().size
+                            val total = database.allFiles().size
                             database.close()
+                            total
                         }
+                        indexedCount = count
                         status = "اكتملت فهرسة المجلد. عدد ملفاته: ${files.size}"
                     } catch (error: Exception) {
                         status = "تعذرت قراءة المجلد: ${error.localizedMessage ?: "خطأ غير معروف"}"
