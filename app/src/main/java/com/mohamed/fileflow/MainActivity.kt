@@ -377,7 +377,8 @@ private fun IndexedSearchResults(query: String, onCategory: (String) -> Unit) {
     val matchingCategories = remember(query) {
         categories.filter { category ->
             category.title.contains(query.trim(), ignoreCase = true) ||
-                category.subtitle.contains(query.trim(), ignoreCase = true)
+                category.subtitle.contains(query.trim(), ignoreCase = true) ||
+                category.description.contains(query.trim(), ignoreCase = true)
         }
     }
 
