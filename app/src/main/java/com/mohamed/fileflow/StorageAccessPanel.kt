@@ -228,6 +228,10 @@ fun StorageAccessPanel() {
                                 status = "تعذر فتح إعدادات الوصول: ${error.localizedMessage ?: "خطأ"}"
                             }
                         }
+                    } else if (Build.VERSION.SDK_INT >= 30 && AllFilesIndexer.hasAccess(context)) {
+                        // MANAGE_EXTERNAL_STORAGE already provides the required shared-file
+                        // access. Do not request extra photo/video/audio permissions.
+                        scanAndSave()
                     } else {
                         val missing = AndroidFileIndexer.requiredMediaPermissions().filter { permission ->
                             ContextCompat.checkSelfPermission(
@@ -235,11 +239,8 @@ fun StorageAccessPanel() {
                                 permission
                             ) != android.content.pm.PackageManager.PERMISSION_GRANTED
                         }
-                        if (missing.isEmpty()) {
-                            scanAndSave()
-                        } else {
-                            permissionLauncher.launch(missing.toTypedArray())
-                        }
+                        if (missing.isEmpty()) scanAndSave()
+                        else permissionLauncher.launch(missing.toTypedArray())
                     }
                 },
                 enabled = !busy,
@@ -258,13 +259,18 @@ fun StorageAccessPanel() {
 
             OutlinedButton(
                 onClick = {
-                    val missing = AndroidFileIndexer.requiredMediaPermissions().filter { permission ->
-                        ContextCompat.checkSelfPermission(
-                            context,
-                            permission
-                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (Build.VERSION.SDK_INT >= 30 && AllFilesIndexer.hasAccess(context)) {
+                        scanAndSave()
+                    } else {
+                        val missing = AndroidFileIndexer.requiredMediaPermissions().filter { permission ->
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                permission
+                            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                        }
+                        if (missing.isEmpty()) scanAndSave()
+                        else permissionLauncher.launch(missing.toTypedArray())
                     }
-                    if (missing.isEmpty()) scanAndSave() else permissionLauncher.launch(missing.toTypedArray())
                 },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth()
