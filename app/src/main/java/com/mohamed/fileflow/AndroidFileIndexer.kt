@@ -181,7 +181,7 @@ class FileIndexDatabase(context: Context) :
         readableDatabase.rawQuery("SELECT category, COUNT(*) FROM indexed_files WHERE category != 'system' GROUP BY category", null).use { cursor ->
             while (cursor.moveToNext()) result[cursor.getString(0)] = cursor.getInt(1)
         }
-        readableDatabase.rawQuery("SELECT COUNT(*) FROM indexed_files WHERE size_bytes = 0", null).use { cursor ->
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM indexed_files WHERE size_bytes = 0 AND category != 'system'", null).use { cursor ->
             if (cursor.moveToFirst()) result["empty"] = cursor.getInt(0)
         }
         return result
@@ -258,7 +258,7 @@ class FileIndexDatabase(context: Context) :
     fun allFiles(): List<IndexedFile> {
         val result = mutableListOf<IndexedFile>()
         readableDatabase.query(
-            "indexed_files", null, null, null, null, null, "name COLLATE NOCASE ASC"
+            "indexed_files", null, "category != ?", arrayOf("system"), null, null, "name COLLATE NOCASE ASC"
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 result += IndexedFile(
@@ -400,13 +400,13 @@ object AndroidFileIndexer {
         val rows = mutableListOf<IndexedFile>()
         var skippedEntries = 0
         val visitedDirectories = mutableSetOf<String>()
-        val pending = ArrayDeque<DocumentFile>()
-        pending.addLast(root)
+        val pending = ArrayDeque<Pair<DocumentFile, String>>()
+        pending.addLast(root to (root.name ?: ""))
 
         // Iterative traversal avoids stack overflow on deeply nested provider trees.
         // A faulty provider or revoked child permission must not stop other folders.
         while (pending.isNotEmpty()) {
-            val directory = pending.removeLast()
+            val (directory, parentPath) = pending.removeLast()
             if (!visitedDirectories.add(directory.uri.toString())) continue
 
             val children = try {
@@ -422,7 +422,7 @@ object AndroidFileIndexer {
             for (child in children) {
                 try {
                     when {
-                        child.isDirectory -> pending.addLast(child)
+                        child.isDirectory -> pending.addLast(child to listOf(parentPath, child.name.orEmpty()).filter { it.isNotBlank() }.joinToString("/"))
                         child.isFile -> {
                             val name = child.name?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
                             val mime = child.type
@@ -432,7 +432,7 @@ object AndroidFileIndexer {
                                 mimeType = mime,
                                 sizeBytes = queryDocumentSize(context, child.uri) ?: -1L,
                                 modifiedSeconds = (child.lastModified().coerceAtLeast(0L)) / 1000L,
-                                category = if (SystemFileClassifier.isSystemPath("", name)) "system" else FileClassifier.classify(name, mime),
+                                category = if (SystemFileClassifier.isSystemPath(parentPath, name)) "system" else FileClassifier.classify(name, mime),
                                 source = "saf:$treeUri"
                             )
                         }
