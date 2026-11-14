@@ -70,6 +70,29 @@ fun DeviceStorageCard() {
 object AllFilesIndexer {
     fun hasAccess(): Boolean = android.os.Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
 
+    private fun classify(name: String, mime: String?): String {
+        val type = mime?.lowercase(Locale.ROOT).orEmpty()
+        val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        return when {
+            type.startsWith("image/") || ext in setOf("jpg","jpeg","png","gif","webp","bmp","heic","heif","avif","tif","tiff","svg") -> "images"
+            type.startsWith("video/") || ext in setOf("mp4","mkv","mov","webm","avi","3gp","m4v","ts","mpeg","mpg") -> "videos"
+            type.startsWith("audio/") || ext in setOf("mp3","m4a","aac","wav","ogg","opus","flac","mid","midi","amr") -> "audio"
+            type == "application/pdf" || ext in setOf("pdf","doc","docx","xls","xlsx","ppt","pptx","odt","ods","odp","rtf","txt","md","epub") -> "documents"
+            type == "application/zip" || type == "application/x-rar-compressed" || ext in setOf("zip","rar","7z","tar","gz","bz2","xz") -> "archives"
+            ext in setOf("kt","kts","java","py","js","ts","tsx","jsx","html","css","xml","json","yaml","yml","toml","c","h","cpp","hpp","go","rs","sh","gradle","properties","sql") -> "code"
+            ext in setOf("apk","aab","apks","xapk") || type == "application/vnd.android.package-archive" -> "installers"
+            else -> "other"
+        }
+    }
+
+    private fun safeDisplayName(raw: String?): String {
+        val value = raw?.takeIf { it.isNotBlank() } ?: "بدون اسم"
+        // Some providers expose percent-encoded UTF-8 names as display names.
+        return if (Regex("(%[0-9A-Fa-f]{2}){2,}").containsMatchIn(value)) {
+            runCatching { Uri.decode(value) }.getOrDefault(value)
+        } else value
+    }
+
     fun scan(context: Context): List<IndexedFile> {
         val rows = mutableListOf<IndexedFile>()
         val collection = MediaStore.Files.getContentUri("external")
@@ -95,13 +118,14 @@ object AllFilesIndexer {
                     mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO) continue
                 val id = cursor.getLong(idCol)
                 val mime = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol)
+                val name = safeDisplayName(cursor.getString(nameCol))
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
-                    name = cursor.getString(nameCol) ?: "بدون اسم",
+                    name = name,
                     mimeType = mime,
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
-                    category = "other",
+                    category = classify(name, mime),
                     source = "all-files"
                 )
             }
