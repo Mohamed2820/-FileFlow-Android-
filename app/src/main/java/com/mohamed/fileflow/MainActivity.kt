@@ -66,24 +66,24 @@ private data class FileCategory(
 )
 
 private val categories = listOf(
-    FileCategory("study", "الدراسة", "المواد والمراجع والمحاضرات", "تنظيم هرمي: مادة دراسية ثم ملفات المادة، مع تجميع المراجع والمحاضرات والملخصات.", Icons.Rounded.School, Color(0xFF8B7CF6)),
-    FileCategory("images", "الصور", "الصور واللقطات", "تجميع الصور حسب النوع والتاريخ والمجلد، مع عرض المعاينات بعد منح الوصول.", Icons.Rounded.Image, Color(0xFF58A6E7)),
-    FileCategory("videos", "الفيديوهات", "المقاطع والتسجيلات المرئية", "عرض ملفات الفيديو وبياناتها الأساسية ومددها وأحجامها عند توفر البيانات.", Icons.Rounded.PlayCircle, Color(0xFFE879A8)),
-    FileCategory("audio", "الصوتيات", "الموسيقى والتسجيلات", "تنظيم الصوتيات باستخدام بيانات الوسائط المتاحة مثل الفنان والألبوم والمدة.", Icons.Rounded.MusicNote, Color(0xFFE7A24E)),
-    FileCategory("documents", "المستندات", "PDF وWord وExcel والنصوص", "المستندات المصنفة حسب MIME type أو امتداد الملف.", Icons.Rounded.Description, Color(0xFF5C9DE8)),
-    FileCategory("archives", "الملفات المضغوطة", "ZIP وRAR و7Z وغيرها", "حزم وأرشيفات الملفات المعروفة من الامتداد أو نوع MIME.", Icons.Rounded.FolderZip, Color(0xFFB18AE8)),
-    FileCategory("code", "ملفات البرمجة", "المصدر والإعدادات والبيانات", "ملفات الشيفرة والتهيئة المعروفة من امتداداتها.", Icons.Rounded.Code, Color(0xFF51B68A)),
-    FileCategory("installers", "ملفات تثبيت التطبيقات", "APK وAAB والحزم", "ملفات تثبيت أو حزم تطبيقات Android.", Icons.Rounded.Android, Color(0xFF4EB8C5)),
-    FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF51B68A)),
-    FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFF4EB8C5)),
-    FileCategory("empty", "الملفات الفارغة", "ملفات بحجم صفر", "إظهار الملفات التي يبلغ حجمها صفرًا، دون حذفها أو تعديلها تلقائيًا.", Icons.Rounded.InsertDriveFile, Color(0xFF9299A8)),
+    FileCategory("study", "الدراسة", "المواد والمراجع والمحاضرات", "تنظيم هرمي: مادة دراسية ثم ملفات المادة، مع تجميع المراجع والمحاضرات والملخصات.", Icons.Rounded.School, Color(0xFFDC2626)),
+    FileCategory("images", "الصور", "الصور واللقطات", "تجميع الصور حسب النوع والتاريخ والمجلد، مع عرض المعاينات بعد منح الوصول.", Icons.Rounded.Image, Color(0xFF2563EB)),
+    FileCategory("videos", "الفيديوهات", "المقاطع والتسجيلات المرئية", "عرض ملفات الفيديو وبياناتها الأساسية ومددها وأحجامها عند توفر البيانات.", Icons.Rounded.PlayCircle, Color(0xFFF97316)),
+    FileCategory("audio", "الصوتيات", "الموسيقى والتسجيلات", "تنظيم الصوتيات باستخدام بيانات الوسائط المتاحة مثل الفنان والألبوم والمدة.", Icons.Rounded.MusicNote, Color(0xFF16A34A)),
+    FileCategory("documents", "المستندات", "PDF وWord وExcel والنصوص", "المستندات المصنفة حسب MIME type أو امتداد الملف.", Icons.Rounded.Description, Color(0xFFEAB308)),
+    FileCategory("archives", "الملفات المضغوطة", "ZIP وRAR و7Z وغيرها", "حزم وأرشيفات الملفات المعروفة من الامتداد أو نوع MIME.", Icons.Rounded.FolderZip, Color(0xFF64748B)),
+    FileCategory("code", "ملفات البرمجة", "المصدر والإعدادات والبيانات", "ملفات الشيفرة والتهيئة المعروفة من امتداداتها.", Icons.Rounded.Code, Color(0xFF0D9488)),
+    FileCategory("installers", "ملفات تثبيت التطبيقات", "APK وAAB والحزم", "ملفات تثبيت أو حزم تطبيقات Android.", Icons.Rounded.Android, Color(0xFF3B82F6)),
+    FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF16A34A)),
+    FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFF0EA5E9)),
+    FileCategory("empty", "الملفات الفارغة", "ملفات بحجم صفر", "إظهار الملفات التي يبلغ حجمها صفرًا، دون حذفها أو تعديلها تلقائيًا.", Icons.Rounded.InsertDriveFile, Color(0xFF9CA3AF)),
     FileCategory("other", "أخرى", "ملفات لم يتم تصنيفها بعد", "الملفات التي لا تتوفر أدلة كافية لتصنيفها ستبقى هنا بدل التخمين.", Icons.Rounded.Folder, Color(0xFF9299A8))
 )
 
 private val ink = Color(0xFF172033)
 private val muted = Color(0xFF788397)
 private val canvas = Color(0xFFF4F6FA)
-private val brand = Color(0xFF8B5CF6)
+private val brand = Color(0xFFDC2626)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,15 +110,15 @@ private fun FileFlowApp() {
     BackHandler(enabled = selected != "home") { goBack() }
 
     val scheme = if (dark) darkColorScheme(
-        primary = Color(0xFF9D70FF), secondary = Color(0xFF31D6F2), tertiary = Color(0xFFE879F9),
-        background = Color(0xFF090B1B), surface = Color(0xFF151832),
-        onBackground = Color(0xFFF4F1FF), onSurface = Color(0xFFF4F1FF),
-        surfaceVariant = Color(0xFF24264A), onSurfaceVariant = Color(0xFFC4C4E3)
+        primary = Color(0xFFEF4444), secondary = Color(0xFFFACC15), tertiary = Color(0xFF3B82F6),
+        background = Color(0xFF080808), surface = Color(0xFF171717),
+        onBackground = Color(0xFFF5F5F5), onSurface = Color(0xFFFFFFFF),
+        surfaceVariant = Color(0xFF292929), onSurfaceVariant = Color(0xFFD4D4D4)
     ) else lightColorScheme(
-        primary = Color(0xFF7045D8), secondary = Color(0xFF168EA8),
-        background = Color(0xFFF5F2FF), surface = Color.White,
-        onBackground = ink, onSurface = ink,
-        surfaceVariant = Color(0xFFECE7FA), onSurfaceVariant = Color(0xFF596579)
+        primary = Color(0xFFB91C1C), secondary = Color(0xFFCA8A04),
+        background = Color(0xFFF5F5F5), surface = Color.White,
+        onBackground = Color(0xFF171717), onSurface = Color(0xFF171717),
+        surfaceVariant = Color(0xFFE5E5E5), onSurfaceVariant = Color(0xFF525252)
     )
 
     MaterialTheme(colorScheme = scheme) {
@@ -222,11 +222,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         counts = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
-                val all = database.allFiles()
-                categories.associate { category ->
-                    category.id to if (category.id == "empty") all.count { it.sizeBytes == 0L }
-                    else all.count { it.category == category.id }
-                }
+                database.countByCategory()
             } finally {
                 database.close()
             }
@@ -252,19 +248,19 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                     Modifier.fillMaxWidth()
                         .background(
                             Brush.linearGradient(
-                                listOf(Color(0xFF29145D), Color(0xFF171A42), Color(0xFF073B59))
+                                listOf(Color(0xFF171717), Color(0xFF7F1D1D), Color(0xFF1D4ED8))
                             )
                         )
                         .padding(horizontal = 18.dp, vertical = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("FILEFLOW", color = Color(0xFFC5A9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("FILEFLOW", color = Color(0xFFFACC15), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(5.dp))
                         Text("كل ملفاتك.. بنظام أذكى", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("تصنيف بالاسم • فئات متداخلة • معاينات", color = Color(0xFFD1D0F0), fontSize = 10.sp)
+                        Text("تصنيف بالاسم • فئات متداخلة • معاينات", color = Color(0xFFE5E5E5), fontSize = 10.sp)
                     }
-                    Surface(shape = RoundedCornerShape(19.dp), color = Color(0xFF8050E8)) {
+                    Surface(shape = RoundedCornerShape(19.dp), color = Color(0xFFDC2626)) {
                         Icon(Icons.Rounded.FolderCopy, null, tint = Color.White, modifier = Modifier.padding(13.dp).size(38.dp))
                     }
                 }
@@ -704,13 +700,8 @@ private fun IndexedFilesContent(
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
-                val all = database.allFiles()
-                val categoryFiles = if (selected == "empty") all.filter { it.sizeBytes == 0L }
-                else all.filter { it.category == selected }
-                categoryFiles.filter { file ->
-                    query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
-                        (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
-                }
+                if (selected.startsWith("custom:")) database.filesInCustomCategory(selected)
+                else database.filesForCategory(selected, query.trim())
             } finally {
                 database.close()
             }
@@ -958,7 +949,7 @@ private fun IndexedFilesContent(
                                     Icon(
                                         if (showingSubjectTiles) Icons.Rounded.School else Icons.Rounded.InsertDriveFile,
                                         contentDescription = null,
-                                        tint = if (showingSubjectTiles) Color(0xFFB28AFF) else Color(0xFF53C6F0),
+                                        tint = if (showingSubjectTiles) Color(0xFFDC2626) else Color(0xFF2563EB),
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(Modifier.height(7.dp))
@@ -1283,9 +1274,9 @@ private fun FileDetailPanel(
                 MediaThumbnail(file, file.category, Modifier.fillMaxWidth().height(175.dp))
             } else {
                 Box(
-                    Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(listOf(Color(0xFF26164F), Color(0xFF102A46)))),
+                    Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(listOf(Color(0xFF262626), Color(0xFF1D4ED8)))),
                     contentAlignment = Alignment.Center
-                ) { Icon(fileCategoryIcon(file.category), null, tint = Color(0xFFB99AFF), modifier = Modifier.size(50.dp)) }
+                ) { Icon(fileCategoryIcon(file.category), null, tint = Color(0xFFFACC15), modifier = Modifier.size(50.dp)) }
             }
             Column(Modifier.fillMaxWidth().padding(11.dp)) {
                 Text(file.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
