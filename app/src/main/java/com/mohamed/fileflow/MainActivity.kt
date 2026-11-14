@@ -316,6 +316,9 @@ private fun ArchiveScreen(
         }
 
         when {
+            selected == "all" && query.isNotBlank() -> {
+                IndexedSearchResults(query)
+            }
             selected == "all" -> {
                 if (filtered.isEmpty()) {
                     EmptyState(Icons.Rounded.SearchOff, "لا توجد أقسام مطابقة", "جرّب كلمة بحث مختلفة.")
@@ -370,6 +373,60 @@ private fun ArchiveScreen(
     }
 }
 
+
+@Composable
+private fun IndexedSearchResults(query: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var files by remember(query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
+
+    LaunchedEffect(query) {
+        files = withContext(Dispatchers.IO) {
+            val database = FileIndexDatabase(context)
+            val all = database.allFiles()
+            database.close()
+            all.filter { file ->
+                file.name.contains(query.trim(), ignoreCase = true) ||
+                    (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
+            }.sortedBy { it.name.lowercase() }
+        }
+    }
+
+    if (files.isEmpty()) {
+        EmptyState(Icons.Rounded.SearchOff, "لا توجد ملفات مطابقة", "تأكد من فهرسة الوسائط أو اختيار مجلد يحتوي على ملفات.")
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+        ) {
+            items(files, key = { it.uri }) { file ->
+                ListItem(
+                    headlineContent = { Text(file.name, maxLines = 1) },
+                    supportingContent = {
+                        Text("${file.category} • ${file.mimeType ?: "نوع غير معروف"} • ${file.sizeBytes} بايت", color = muted, fontSize = 11.sp)
+                    },
+                    leadingContent = { Icon(Icons.Rounded.InsertDriveFile, contentDescription = null, tint = brand) },
+                    modifier = Modifier.clickable {
+                        try {
+                            val uri = Uri.parse(file.uri)
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, file.mimeType ?: "*/*")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                        } catch (error: Exception) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+    }
+}
 
 @Composable
 private fun IndexedFilesContent(selected: String, query: String) {
