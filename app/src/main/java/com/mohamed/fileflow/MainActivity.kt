@@ -837,6 +837,15 @@ private fun IndexedFilesContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("تحديد: ${selectedUris.size}", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                TextButton(onClick = {
+                    if (selectedUris.size == visibleFiles.size) selectedUris.clear()
+                    else {
+                        selectedUris.clear()
+                        selectedUris.addAll(visibleFiles.map { it.uri })
+                    }
+                }) {
+                    Text(if (visibleFiles.isNotEmpty() && selectedUris.size == visibleFiles.size) "إلغاء الكل" else "تحديد الكل", fontSize = 10.sp)
+                }
                 if (selectedUris.size == 1) {
                     TextButton(onClick = {
                         renameTarget = selectedFiles.firstOrNull()
