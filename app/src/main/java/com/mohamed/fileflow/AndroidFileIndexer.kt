@@ -36,7 +36,7 @@ data class TreeScanResult(
 )
 
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 4) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 5) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -65,10 +65,36 @@ class FileIndexDatabase(context: Context) :
             db.execSQL("CREATE TABLE IF NOT EXISTS file_category_overrides (uri TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL)")
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_category_overrides_category ON file_category_overrides(category_id)")
         }
-        // Deliberately preserve every existing file category during upgrades.
-        // Reclassifying stored rows here can silently move files between Study,
-        // Code, Documents, etc. Existing rows are left untouched; fresh indexing
-        // continues to use the legacy FileClassifier rules.
+        if (oldVersion < 5) {
+            // Restore the legacy smart classification for existing user files.
+            // Keep the dedicated system bucket untouched so its exclusion path
+            // and read-only section remain exactly as before.
+            val rows = mutableListOf<Triple<String, String, String?>>()
+            db.query(
+                "indexed_files",
+                arrayOf("uri", "name", "mime_type"),
+                "category != ?",
+                arrayOf("system"),
+                null, null, null
+            ).use { cursor ->
+                val uriIndex = cursor.getColumnIndexOrThrow("uri")
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val mimeIndex = cursor.getColumnIndexOrThrow("mime_type")
+                while (cursor.moveToNext()) {
+                    rows += Triple(
+                        cursor.getString(uriIndex),
+                        cursor.getString(nameIndex),
+                        if (cursor.isNull(mimeIndex)) null else cursor.getString(mimeIndex)
+                    )
+                }
+            }
+            rows.forEach { (uri, name, mime) ->
+                val values = ContentValues().apply {
+                    put("category", FileClassifier.classify(name, mime))
+                }
+                db.update("indexed_files", values, "uri = ?", arrayOf(uri))
+            }
+        }
     }
 
     fun replaceSource(source: String, files: List<IndexedFile>) {
