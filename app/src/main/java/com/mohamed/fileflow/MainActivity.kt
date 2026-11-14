@@ -224,6 +224,8 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
     var editingCategory by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
     var categoryName by remember { mutableStateOf("") }
     var categoryActionMenu by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
+    var parentCategoryId by remember { mutableStateOf<String?>(null) }
+    var parentMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val loaded = withContext(Dispatchers.IO) {
@@ -304,7 +306,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("أقسامك المخصصة", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { categoryName = ""; showAddCategory = true }) {
+                TextButton(onClick = { categoryName = ""; parentCategoryId = null; showAddCategory = true }) {
                     Icon(Icons.Rounded.Add, null); Text("إضافة قسم")
                 }
             }
@@ -377,7 +379,21 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
             onDismissRequest = { showAddCategory = false; editingCategory = null },
             title = { Text(if (editing == null) "إضافة قسم يدوي" else "تعديل اسم القسم") },
             text = {
-                OutlinedTextField(value = categoryName, onValueChange = { categoryName = it }, singleLine = true, label = { Text("اسم القسم") })
+                Column {
+                    OutlinedTextField(value = categoryName, onValueChange = { categoryName = it }, singleLine = true, label = { Text("اسم القسم") })
+                    Spacer(Modifier.height(8.dp))
+                    Box {
+                        OutlinedButton(onClick = { parentMenuExpanded = true }) {
+                            Text("المكان: " + (customCategories.firstOrNull { it.first == parentCategoryId }?.second ?: "قسم رئيسي"))
+                        }
+                        DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("قسم رئيسي") }, onClick = { parentCategoryId = null; parentMenuExpanded = false })
+                            customCategories.filter { it.first != editing?.first }.forEach { parent ->
+                                DropdownMenuItem(text = { Text(parent.second) }, onClick = { parentCategoryId = parent.first; parentMenuExpanded = false })
+                            }
+                        }
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -387,8 +403,11 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                             withContext(Dispatchers.IO) {
                                 val db = FileIndexDatabase(context)
                                 try {
-                                    if (editing == null) db.addCustomCategory("custom:" + java.util.UUID.randomUUID().toString(), clean)
-                                    else db.renameCustomCategory(editing.first, clean)
+                                    if (editing == null) db.addCustomCategory("custom:" + java.util.UUID.randomUUID().toString(), clean, parentCategoryId)
+                                    else {
+                                        db.renameCustomCategory(editing.first, clean)
+                                        db.moveCustomCategory(editing.first, parentCategoryId)
+                                    }
                                 } finally { db.close() }
                             }
                             customCategories = withContext(Dispatchers.IO) {
@@ -413,6 +432,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
             confirmButton = {
                 TextButton(onClick = {
                     categoryName = category.second
+                    parentCategoryId = category.third
                     editingCategory = category
                     categoryActionMenu = null
                 }) { Text("إعادة تسمية") }
