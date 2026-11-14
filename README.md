@@ -1,19 +1,27 @@
 # FileFlow Android
 
-Smart, non-destructive file archive and file manager for Android.
+Native Android file archive and file manager.
 
-## Core principles
+## Product rules
+- Index files without moving or modifying originals.
+- Keep indexing, metadata extraction, and classification on-device.
+- Organize study material by subject; programming files by project and extension; media by type and available metadata.
+- Keep unknown files in an uncategorized group rather than guessing.
+- Use Android MediaStore and Storage Access Framework for user-authorized access.
+- Do not assume access to protected locations such as Android/data.
 
-- Index files without moving or modifying their originals.
-- Keep classification and metadata processing on-device.
-- Use a hierarchical archive: study subjects, programming projects, media, applications, empty files, and an uncategorized area.
-- Classify audio using available media metadata, filenames, and folder names.
-- Provide conventional file-manager actions only with explicit user confirmation and Android-granted access.
+## Delivery sequence
+1. Complete the native Android interface.
+2. Implement Android permissions, MediaStore/SAF integration, indexing, and file operations.
+3. Build and publish a real APK through GitHub Actions.
+4. Install and test on a physical Android device, fix defects, and retest.
 
-## Android access model
+## Current implementation
+- Native Kotlin + Jetpack Compose Android application.
+- Arabic-first interface with home, category navigation, search field, and settings.
+- The interface does not fabricate phone files or storage figures. Device data remains unavailable until the Android integration stage.
+- Application ID: `com.mohamed.fileflow`
+- Minimum Android version: Android 8.0 (API 26).
 
-The application will use Android's Storage Access Framework and MediaStore through a native Android integration. Browser-only directory selection is not considered equivalent to full-device access. Access to protected locations such as `Android/data` is not assumed.
-
-## Development status
-
-Project repository initialized. Implementation will be added in small, verifiable stages, with Android permissions and device capabilities tested separately from the web interface.
+## Build
+The Android project uses Gradle and Android Gradle Plugin. The CI build workflow will be added in delivery stage 3.
