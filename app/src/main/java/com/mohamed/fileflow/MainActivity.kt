@@ -775,7 +775,12 @@ private fun IndexedFilesContent(
                 withContext(Dispatchers.IO) {
                     val db = FileIndexDatabase(context)
                     try {
-                        if (moving) db.deleteFiles(sources.map { it.uri })
+                        if (moving) {
+                            val successfullyMovedSourceUris = results.mapIndexedNotNull { index, result ->
+                                if (result.success) sources.getOrNull(index)?.uri else null
+                            }
+                            db.deleteFiles(successfullyMovedSourceUris)
+                        }
                         db.upsertFiles(results.filter { it.success }.mapNotNull { it.file })
                     } finally {
                         db.close()
