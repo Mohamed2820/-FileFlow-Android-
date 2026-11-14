@@ -138,7 +138,7 @@ class FileIndexDatabase(context: Context) :
                     put("mime_type", file.mimeType)
                     put("size_bytes", file.sizeBytes)
                     put("modified_seconds", file.modifiedSeconds)
-                    put("category", file.category)
+                    put("category", manualCategory(file.uri) ?: file.category)
                     put("source", file.source)
                 }
                 val row = writableDatabase.insertWithOnConflict(
