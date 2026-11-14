@@ -124,20 +124,26 @@ fun StorageAccessPanel() {
                 scope.launch {
                     status = "جارٍ فهرسة المجلد..."
                     try {
-                        val files = withContext(Dispatchers.IO) {
+                        val scanResult = withContext(Dispatchers.IO) {
                             AndroidFileIndexer.scanPickedTree(context, treeUri)
                         }
                         val count = withContext(Dispatchers.IO) {
                             val db = FileIndexDatabase(context)
                             try {
-                                db.replaceSource("saf:$treeUri", files)
+                                if (scanResult.skippedEntries == 0) {
+                                    db.replaceSource("saf:$treeUri", scanResult.files)
+                                }
                                 db.allFiles().size
                             } finally {
                                 db.close()
                             }
                         }
                         indexedCount = count
-                        status = "اكتملت فهرسة المجلد: ${files.size} ملف."
+                        status = if (scanResult.skippedEntries == 0) {
+                            "اكتملت فهرسة المجلد: ${scanResult.files.size} ملف."
+                        } else {
+                            "الفهرسة غير مكتملة: تعذرت قراءة ${scanResult.skippedEntries} عناصر/مجلدات. لم أستبدل الفهرس السابق حتى لا أفقد بياناته. حاول اختيار المجلد مرة أخرى بعد مراجعة الصلاحيات."
+                        }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (error: Exception) {
