@@ -523,6 +523,7 @@ private fun CategoryCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ArchiveScreen(
     selected: String,
