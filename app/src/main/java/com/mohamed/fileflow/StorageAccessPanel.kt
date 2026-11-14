@@ -86,7 +86,7 @@ fun StorageAccessPanel() {
 
                 indexedCount = count
                 hasBroadAccess = AllFilesIndexer.hasAccess(context)
-                status = "اكتمل الفحص: ${media.size + allFiles.size} ملف تم اكتشافه. الملفات غير الوسائط: ${allFiles.size}."
+                status = "اكتمل الفحص: ${media.size + allFiles.size} ملف في الفهرس. عدد الملفات المحفوظة في قاعدة البيانات: $count."
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
