@@ -152,6 +152,20 @@ class FileIndexDatabase(context: Context) :
         }
     }
 
+    fun updateCategory(uris: Collection<String>, category: String) {
+        if (uris.isEmpty()) return
+        writableDatabase.beginTransaction()
+        try {
+            val values = ContentValues().apply { put("category", category) }
+            uris.forEach { uri ->
+                writableDatabase.update("indexed_files", values, "uri = ?", arrayOf(uri))
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
     fun allFiles(): List<IndexedFile> {
         val result = mutableListOf<IndexedFile>()
         readableDatabase.query(
