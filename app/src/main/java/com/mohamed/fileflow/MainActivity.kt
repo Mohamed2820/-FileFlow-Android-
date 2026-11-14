@@ -11,6 +11,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.video.videoFrameMillis
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -45,6 +53,10 @@ private val categories = listOf(
     FileCategory("images", "الصور", "الصور واللقطات", "تجميع الصور حسب النوع والتاريخ والمجلد، مع عرض المعاينات بعد منح الوصول.", Icons.Rounded.Image, Color(0xFF58A6E7)),
     FileCategory("videos", "الفيديوهات", "المقاطع والتسجيلات المرئية", "عرض ملفات الفيديو وبياناتها الأساسية ومددها وأحجامها عند توفر البيانات.", Icons.Rounded.PlayCircle, Color(0xFFE879A8)),
     FileCategory("audio", "الصوتيات", "الموسيقى والتسجيلات", "تنظيم الصوتيات باستخدام بيانات الوسائط المتاحة مثل الفنان والألبوم والمدة.", Icons.Rounded.MusicNote, Color(0xFFE7A24E)),
+    FileCategory("documents", "المستندات", "PDF وWord وExcel والنصوص", "المستندات المصنفة حسب MIME type أو امتداد الملف.", Icons.Rounded.Description, Color(0xFF5C9DE8)),
+    FileCategory("archives", "الملفات المضغوطة", "ZIP وRAR و7Z وغيرها", "حزم وأرشيفات الملفات المعروفة من الامتداد أو نوع MIME.", Icons.Rounded.FolderZip, Color(0xFFB18AE8)),
+    FileCategory("code", "ملفات البرمجة", "المصدر والإعدادات والبيانات", "ملفات الشيفرة والتهيئة المعروفة من امتداداتها.", Icons.Rounded.Code, Color(0xFF51B68A)),
+    FileCategory("installers", "ملفات تثبيت التطبيقات", "APK وAAB والحزم", "ملفات تثبيت أو حزم تطبيقات Android.", Icons.Rounded.Android, Color(0xFF4EB8C5)),
     FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF51B68A)),
     FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFF4EB8C5)),
     FileCategory("empty", "الملفات الفارغة", "ملفات بحجم صفر", "إظهار الملفات التي يبلغ حجمها صفرًا، دون حذفها أو تعديلها تلقائيًا.", Icons.Rounded.InsertDriveFile, Color(0xFF9299A8)),
@@ -345,7 +357,7 @@ private fun ArchiveScreen(
                 }
                 EmptyState(icon, message, "لن تظهر نتائج قبل ربط الهاتف وفهرسة الملفات في المرحلة الثانية.")
             }
-            selected in listOf("images", "videos", "audio", "other", "empty") -> {
+            selected in listOf("images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
                 IndexedFilesContent(selected, query)
             }
             else -> {
@@ -413,9 +425,9 @@ private fun IndexedSearchResults(query: String) {
 @Composable
 private fun IndexedFilesContent(selected: String, query: String) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var files by remember(selected) { mutableStateOf<List<IndexedFile>>(emptyList()) }
+    var files by remember(selected, query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
 
-    LaunchedEffect(selected) {
+    LaunchedEffect(selected, query) {
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             val all = database.allFiles()
@@ -431,12 +443,60 @@ private fun IndexedFilesContent(selected: String, query: String) {
         }
     }
 
+    fun openFile(file: IndexedFile) {
+        try {
+            val uri = Uri.parse(file.uri)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, file.mimeType ?: "*/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        } catch (error: Exception) {
+            android.widget.Toast.makeText(
+                context,
+                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
     if (files.isEmpty()) {
         EmptyState(
             Icons.Rounded.FolderOpen,
             "لا توجد ملفات مفهرسة في هذا القسم",
-            "امنح صلاحية الوسائط أو اختر مجلدًا من الصفحة الرئيسية، ثم ارجع إلى هذا القسم."
+            "ارجع للرئيسية وحدّث فهرسة الملفات، ثم افتح القسم مرة أخرى."
         )
+    } else if (selected == "images" || selected == "videos") {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            gridItems(files, key = { it.uri }) { file ->
+                Column(
+                    modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(Uri.parse(file.uri))
+                            .crossfade(true)
+                            .apply { if (selected == "videos") videoFrameMillis(1000) }
+                            .build(),
+                        contentDescription = file.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(file.name, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground)
+                    Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 10.sp, color = muted)
+                }
+            }
+        }
     } else {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -447,7 +507,7 @@ private fun IndexedFilesContent(selected: String, query: String) {
                     headlineContent = { Text(file.name, maxLines = 1) },
                     supportingContent = {
                         Text(
-                            "${file.mimeType ?: "نوع غير معروف"} • ${if (file.sizeBytes < 0L) "حجم غير معروف" else "${file.sizeBytes} بايت"}",
+                            "${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
                             color = muted,
                             fontSize = 11.sp
                         )
@@ -455,31 +515,18 @@ private fun IndexedFilesContent(selected: String, query: String) {
                     leadingContent = {
                         Icon(
                             when (file.category) {
-                                "images" -> Icons.Rounded.Image
-                                "videos" -> Icons.Rounded.PlayCircle
                                 "audio" -> Icons.Rounded.MusicNote
+                                "documents" -> Icons.Rounded.Description
+                                "archives" -> Icons.Rounded.FolderZip
+                                "code" -> Icons.Rounded.Code
+                                "installers" -> Icons.Rounded.Android
                                 else -> Icons.Rounded.InsertDriveFile
                             },
                             contentDescription = null,
                             tint = brand
                         )
                     },
-                    modifier = Modifier.clickable {
-                        try {
-                            val uri = Uri.parse(file.uri)
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, file.mimeType ?: "*/*")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(intent)
-                        } catch (error: Exception) {
-                            android.widget.Toast.makeText(
-                                context,
-                                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
+                    modifier = Modifier.clickable { openFile(file) }
                 )
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
