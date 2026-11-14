@@ -17,6 +17,7 @@ class FileClassifierTest {
         assertEquals("documents", FileClassifier.classify("notes.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
         assertEquals("archives", FileClassifier.classify("backup.7z", "application/octet-stream"))
         assertEquals("code", FileClassifier.classify("Main.KT", "application/octet-stream"))
+        assertEquals("code", FileClassifier.classify("worker.py", "text/plain"))
         assertEquals("installers", FileClassifier.classify("package.apk", "application/octet-stream"))
     }
 
