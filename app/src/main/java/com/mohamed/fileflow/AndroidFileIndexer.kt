@@ -193,30 +193,53 @@ object AndroidFileIndexer {
     fun scanPickedTree(context: Context, treeUri: Uri): List<IndexedFile> {
         val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
         val rows = mutableListOf<IndexedFile>()
+        val visitedDirectories = mutableSetOf<String>()
+
+        // Document providers are external and may fail on individual folders.
+        // Continue indexing the rest of the selected tree instead of aborting.
         fun visit(directory: DocumentFile) {
-            directory.listFiles().forEach { child ->
-                if (child.isDirectory) {
-                    visit(child)
-                } else if (child.isFile) {
-                    val mime = child.type
-                    val category = when {
-                        mime?.startsWith("image/") == true -> "images"
-                        mime?.startsWith("video/") == true -> "videos"
-                        mime?.startsWith("audio/") == true -> "audio"
-                        else -> "other"
+            val directoryKey = directory.uri.toString()
+            if (!visitedDirectories.add(directoryKey)) return
+
+            val children = try {
+                directory.listFiles()
+            } catch (_: SecurityException) {
+                return
+            } catch (_: IllegalStateException) {
+                return
+            }
+
+            children.forEach { child ->
+                try {
+                    when {
+                        child.isDirectory -> visit(child)
+                        child.isFile -> {
+                            val mime = child.type
+                            val category = when {
+                                mime?.startsWith("image/") == true -> "images"
+                                mime?.startsWith("video/") == true -> "videos"
+                                mime?.startsWith("audio/") == true -> "audio"
+                                else -> "other"
+                            }
+                            rows += IndexedFile(
+                                uri = child.uri.toString(),
+                                name = child.name ?: "بدون اسم",
+                                mimeType = mime,
+                                sizeBytes = child.length(),
+                                modifiedSeconds = child.lastModified() / 1000L,
+                                category = category,
+                                source = "saf:${treeUri}"
+                            )
+                        }
                     }
-                    rows += IndexedFile(
-                        uri = child.uri.toString(),
-                        name = child.name ?: "بدون اسم",
-                        mimeType = mime,
-                        sizeBytes = child.length(),
-                        modifiedSeconds = child.lastModified() / 1000L,
-                        category = category,
-                        source = "saf:${treeUri}"
-                    )
+                } catch (_: SecurityException) {
+                    // A revoked or restricted child must not stop the whole scan.
+                } catch (_: IllegalStateException) {
+                    // Providers can invalidate a document while enumeration is running.
                 }
             }
         }
+
         visit(root)
         return rows
     }
