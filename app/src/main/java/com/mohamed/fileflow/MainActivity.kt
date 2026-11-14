@@ -202,61 +202,114 @@ private fun TopHeader(
 
 @Composable
 private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+
+    LaunchedEffect(Unit) {
+        counts = withContext(Dispatchers.IO) {
+            val database = FileIndexDatabase(context)
+            try {
+                val all = database.allFiles()
+                categories.associate { category ->
+                    category.id to if (category.id == "empty") all.count { it.sizeBytes == 0L }
+                    else all.count { it.category == category.id }
+                }
+            } finally {
+                database.close()
+            }
+        }
+    }
+
+    val tileCategories = categories.filter {
+        it.id in setOf("images", "videos", "audio", "documents", "archives", "empty")
+    }
+    val wideCategories = categories.filter { it.id in setOf("study", "projects", "apps", "other", "installers", "code") }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(13.dp)
     ) {
         item {
             Card(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(25.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Row(
                     Modifier.fillMaxWidth()
                         .background(
                             Brush.linearGradient(
-                                listOf(Color(0xFF21164C), Color(0xFF171A3D), Color(0xFF102A46))
+                                listOf(Color(0xFF29145D), Color(0xFF171A42), Color(0xFF073B59))
                             )
                         )
-                        .padding(18.dp),
+                        .padding(horizontal = 18.dp, vertical = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("FILEFLOW", color = Color(0xFFBDA3FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("FILEFLOW", color = Color(0xFFC5A9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(5.dp))
-                        Text("إدارة ملفاتك بذكاء", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("تصنيف ذكي • معاينات • وصول أسرع", color = Color(0xFFC6C6E8), fontSize = 11.sp)
+                        Text("كل ملفاتك.. بنظام أذكى", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text("تصنيف بالاسم • فئات متداخلة • معاينات", color = Color(0xFFD1D0F0), fontSize = 10.sp)
                     }
-                    Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF8050E8)) {
-                        Icon(Icons.Rounded.FolderCopy, null, tint = Color.White, modifier = Modifier.padding(14.dp).size(36.dp))
+                    Surface(shape = RoundedCornerShape(19.dp), color = Color(0xFF8050E8)) {
+                        Icon(Icons.Rounded.FolderCopy, null, tint = Color.White, modifier = Modifier.padding(13.dp).size(38.dp))
                     }
                 }
             }
         }
-        item {
-            StorageAccessPanel()
-        }
+        item { StorageAccessPanel() }
         item { DeviceStorageCard() }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("تصفح حسب النوع", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onNavigate("all") }) { Text("كل الأقسام") }
+                Text("الأقسام الرئيسية", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onNavigate("all") }) { Text("عرض الكل") }
             }
         }
-        items(categories.chunked(2)) { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                pair.forEach { category -> CategoryCard(category, Modifier.weight(1f)) { onCategory(category.id) } }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
+        items(tileCategories.chunked(3)) { rowCategories ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                rowCategories.forEach { category ->
+                    CategoryCard(
+                        category = category,
+                        modifier = Modifier.weight(1f),
+                        count = counts[category.id]
+                    ) { onCategory(category.id) }
+                }
+                repeat(3 - rowCategories.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+        item {
+            Text("التصنيف الذكي", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        }
+        items(wideCategories) { category ->
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onCategory(category.id) },
+                shape = RoundedCornerShape(17.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = category.tint.copy(alpha = 0.16f)) {
+                        Icon(category.icon, null, tint = category.tint, modifier = Modifier.padding(10.dp).size(23.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(category.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(category.subtitle, color = muted, fontSize = 10.sp, maxLines = 1)
+                    }
+                    counts[category.id]?.let { Text("$it", color = category.tint, fontWeight = FontWeight.Bold) }
+                    Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
+                }
             }
         }
         item {
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Rounded.Shield, null, tint = Color(0xFF39A77B), modifier = Modifier.size(28.dp))
-                    Spacer(Modifier.height(8.dp))
+                Column(Modifier.fillMaxWidth().padding(17.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Rounded.Shield, null, tint = Color(0xFF39A77B), modifier = Modifier.size(27.dp))
+                    Spacer(Modifier.height(7.dp))
                     Text("خصوصيتك أولاً", fontWeight = FontWeight.Bold)
-                    Text("الفهرسة محليًا، والملفات الأصلية لا تُنقل ولا تُعدّل أثناء الفهرسة.", color = muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+                    Text("الفهرسة محليًا، والملفات الأصلية لا تُنقل ولا تُعدّل أثناء الفهرسة.", color = muted, fontSize = 11.sp, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -264,7 +317,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
 }
 
 @Composable
-private fun CategoryCard(category: FileCategory, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun CategoryCard(category: FileCategory, modifier: Modifier = Modifier, count: Int? = null, onClick: () -> Unit) {
     Card(
         modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
@@ -289,8 +342,9 @@ private fun CategoryCard(category: FileCategory, modifier: Modifier = Modifier, 
                 Icon(Icons.Rounded.ChevronLeft, contentDescription = null, tint = category.tint.copy(alpha = 0.9f))
             }
             Spacer(Modifier.height(13.dp))
-            Text(category.title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text(category.subtitle, fontSize = 10.sp, color = muted, maxLines = 2, minLines = 2)
+            Text(category.title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+            count?.let { Text("$it ملف", fontSize = 10.sp, color = category.tint, fontWeight = FontWeight.Bold) }
+            Text(category.subtitle, fontSize = 9.sp, color = muted, maxLines = 2, minLines = 2)
         }
     }
 }
