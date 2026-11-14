@@ -65,35 +65,10 @@ class FileIndexDatabase(context: Context) :
             db.execSQL("CREATE TABLE IF NOT EXISTS file_category_overrides (uri TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL)")
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_category_overrides_category ON file_category_overrides(category_id)")
         }
-        if (oldVersion < 3) {
-            // Reclassify indexed metadata using semantic filename rules.
-            // Collect first, then update after closing the read cursor.
-            val rows = mutableListOf<Triple<String, String, String?>>()
-            db.query(
-                "indexed_files",
-                arrayOf("uri", "name", "mime_type"),
-                null, null, null, null, null
-            ).use { cursor ->
-                val uriIndex = cursor.getColumnIndexOrThrow("uri")
-                val nameIndex = cursor.getColumnIndexOrThrow("name")
-                val mimeIndex = cursor.getColumnIndexOrThrow("mime_type")
-                while (cursor.moveToNext()) {
-                    rows += Triple(
-                        cursor.getString(uriIndex),
-                        cursor.getString(nameIndex),
-                        if (cursor.isNull(mimeIndex)) null else cursor.getString(mimeIndex)
-                    )
-                }
-            }
-            rows.forEach { (uri, name, mime) ->
-                val decodedName = android.net.Uri.decode(name)
-                val values = ContentValues().apply {
-                    put("name", decodedName)
-                    put("category", FileClassifier.classify(decodedName, mime))
-                }
-                db.update("indexed_files", values, "uri = ?", arrayOf(uri))
-            }
-        }
+        // Deliberately preserve every existing file category during upgrades.
+        // Reclassifying stored rows here can silently move files between Study,
+        // Code, Documents, etc. Existing rows are left untouched; fresh indexing
+        // continues to use the legacy FileClassifier rules.
     }
 
     fun replaceSource(source: String, files: List<IndexedFile>) {
