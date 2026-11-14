@@ -95,8 +95,7 @@ object AllFilesIndexer {
             MediaStore.Files.FileColumns.DISPLAY_NAME,
             MediaStore.Files.FileColumns.MIME_TYPE,
             MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.DATE_MODIFIED,
-            MediaStore.Files.FileColumns.MEDIA_TYPE
+            MediaStore.Files.FileColumns.DATE_MODIFIED
         )
         val cursor = context.contentResolver.query(
             collection, projection, null, null,
@@ -108,12 +107,7 @@ object AllFilesIndexer {
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
             val modifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_MODIFIED)
-            val mediaTypeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
             while (cursor.moveToNext()) {
-                val mediaType = cursor.getInt(mediaTypeCol)
-                if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE ||
-                    mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO ||
-                    mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO) continue
                 val id = cursor.getLong(idCol)
                 val mime = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol)
                 val name = safeDisplayName(cursor.getString(nameCol))
