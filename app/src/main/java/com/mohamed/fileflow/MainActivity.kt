@@ -352,6 +352,23 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                 }
             }
         }
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { onNavigate("system") },
+                shape = RoundedCornerShape(17.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF641B2B))
+            ) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 17.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Security, null, tint = Color.White, modifier = Modifier.size(27.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("ملفات النظام", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("عناصر محمية أو مخفية مرصودة في التخزين المشترك — عرض فقط", color = Color(0xFFFFD9DF), fontSize = 10.sp)
+                    }
+                    Icon(Icons.Rounded.ChevronLeft, null, tint = Color.White)
+                }
+            }
+        }
     }
 
     if (showAddCategory || editingCategory != null) {
@@ -564,6 +581,7 @@ private fun ArchiveScreen(
                     }
                 }
             }
+            selected == "system" -> SystemFilesScreen()
             selected == "recent" || selected == "favorites" || selected == "duplicates" -> {
                 val icon = when (selected) {
                     "recent" -> Icons.Rounded.History
@@ -585,6 +603,69 @@ private fun ArchiveScreen(
                 )
             }
             else -> EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
+        }
+    }
+}
+
+@Composable
+private fun SystemFilesScreen() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var files by remember { mutableStateOf<List<IndexedFile>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        loading = true
+        val result = runCatching {
+            withContext(Dispatchers.IO) {
+                val db = FileIndexDatabase(context)
+                try { db.systemFiles() } finally { db.close() }
+            }
+        }
+        files = result.getOrNull().orEmpty()
+        error = result.exceptionOrNull()?.localizedMessage
+        loading = false
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Card(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF641B2B)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Security, null, tint = Color.White)
+                    Spacer(Modifier.width(8.dp))
+                    Text("ملفات النظام — وضع آمن", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    "هذه قائمة بالعناصر المخفية أو المحجوزة التي استطاع Android إظهارها في مساحة التخزين المشتركة. لا توجد هنا أوامر حذف أو نقل أو إعادة تسمية.",
+                    color = Color(0xFFFFD9DF), fontSize = 11.sp
+                )
+                Text(
+                    "لا يستطيع التطبيق العادي قراءة جميع أقسام Android الخاصة مثل /system وبيانات التطبيقات الخاصة وAndroid/data على بعض الإصدارات.",
+                    color = Color(0xFFFFD9DF), fontSize = 10.sp
+                )
+            }
+        }
+        when {
+            loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
+            error != null -> EmptyState(Icons.Rounded.Warning, "تعذر قراءة القائمة", error ?: "خطأ غير معروف")
+            files.isEmpty() -> EmptyState(Icons.Rounded.Security, "لا توجد ملفات نظام مرصودة", "أعد فهرسة التخزين المشترك بعد منح الصلاحية المناسبة.")
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                items(files, key = { it.uri }) { file ->
+                    ListItem(
+                        headlineContent = { Text(file.name, maxLines = 2) },
+                        supportingContent = { Text("${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}", color = muted, fontSize = 10.sp) },
+                        leadingContent = { Icon(Icons.Rounded.Lock, null, tint = Color(0xFF9F334B)) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
         }
     }
 }
