@@ -639,26 +639,52 @@ private fun extensionLabel(file: IndexedFile): String {
 private fun studySubjectLabel(file: IndexedFile): String =
     FileClassifier.studySubject(file.name) ?: "مواد دراسية أخرى"
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun IndexedFilesContent(selected: String, query: String, gridView: Boolean) {
+private fun IndexedFilesContent(
+    selected: String,
+    query: String,
+    gridView: Boolean,
+    selectedSubject: String?,
+    onSubjectChange: (String?) -> Unit,
+    selectedExtension: String?,
+    onExtensionChange: (String?) -> Unit
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     var files by remember(selected, query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
     var detailFile by remember(selected) { mutableStateOf<IndexedFile?>(null) }
-    BackHandler(enabled = detailFile != null) { detailFile = null }
-    var selectedSubject by remember(selected) { mutableStateOf<String?>(null) }
-    var selectedExtension by remember(selected) { mutableStateOf<String?>(null) }
+    var previewFile by remember(selected) { mutableStateOf<IndexedFile?>(null) }
     var sortMode by remember(selected) { mutableStateOf("name_asc") }
     var sortMenuExpanded by remember { mutableStateOf(false) }
+    var selecting by remember(selected) { mutableStateOf(false) }
+    val selectedUris = remember(selected) { mutableStateListOf<String>() }
+    var refreshKey by remember(selected) { mutableIntStateOf(0) }
+    var actionStatus by remember { mutableStateOf<String?>(null) }
+    var renameTarget by remember { mutableStateOf<IndexedFile?>(null) }
+    var renameValue by remember { mutableStateOf("") }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var transferAsMove by remember { mutableStateOf(false) }
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var folderName by remember { mutableStateOf("") }
+    var pendingFolderTree by remember { mutableStateOf<Uri?>(null) }
 
-    LaunchedEffect(selected, query) {
+    BackHandler(enabled = previewFile != null || detailFile != null || selecting) {
+        when {
+            previewFile != null -> previewFile = null
+            detailFile != null -> detailFile = null
+            else -> { selecting = false; selectedUris.clear() }
+        }
+    }
+
+    LaunchedEffect(selected, query, refreshKey) {
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
                 val all = database.allFiles()
-                val categoryFiles = when (selected) {
-                    "empty" -> all.filter { it.sizeBytes == 0L }
-                    else -> all.filter { it.category == selected }
-                }
+                val categoryFiles = if (selected == "empty") all.filter { it.sizeBytes == 0L }
+                else all.filter { it.category == selected }
                 categoryFiles.filter { file ->
                     query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
                         (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
@@ -670,21 +696,16 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
     }
 
     val subjects = remember(files, selected) {
-        if (selected == "study") files.map(::studySubjectLabel).distinct().sorted()
-        else emptyList()
+        if (selected == "study") files.map(::studySubjectLabel).distinct().sorted() else emptyList()
     }
     val subjectFiles = remember(files, selectedSubject) {
-        if (selected == "study" && selectedSubject != null) {
-            files.filter { studySubjectLabel(it) == selectedSubject }
-        } else files
+        if (selected == "study" && selectedSubject != null) files.filter { studySubjectLabel(it) == selectedSubject }
+        else files
     }
-    val extensions = remember(files, selected, selectedSubject) {
-        val source = if (selected == "study") subjectFiles else files
-        source.map(::extensionLabel).distinct().sorted()
-    }
-    val extensionFiles = remember(subjectFiles, files, selected, selectedExtension) {
-        val source = if (selected == "study") subjectFiles else files
-        if (selectedExtension == null) source else source.filter { extensionLabel(it) == selectedExtension }
+    val extensionSource = if (selected == "study") subjectFiles else files
+    val extensions = remember(extensionSource) { extensionSource.map(::extensionLabel).distinct().sorted() }
+    val extensionFiles = remember(extensionSource, selectedExtension) {
+        if (selectedExtension == null) extensionSource else extensionSource.filter { extensionLabel(it) == selectedExtension }
     }
     val visibleFiles = remember(extensionFiles, sortMode) {
         when (sortMode) {
@@ -696,6 +717,10 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
             else -> extensionFiles.sortedBy { it.name.lowercase(Locale.ROOT) }
         }
     }
+    val showingSubjectTiles = selected == "study" && selectedSubject == null
+    val showingExtensionTiles = selectedExtension == null && (selected != "study" || selectedSubject != null)
+    val groupCount = if (showingSubjectTiles) subjects.size else if (showingExtensionTiles) extensions.size else visibleFiles.size
+    val selectedFiles = files.filter { it.uri in selectedUris }
     val sortLabels = listOf(
         "name_asc" to "الاسم: أ إلى ي",
         "name_desc" to "الاسم: ي إلى أ",
@@ -705,100 +730,147 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
         "size_asc" to "الأصغر حجماً"
     )
 
+    fun toggleSelection(file: IndexedFile) {
+        if (file.uri in selectedUris) selectedUris.remove(file.uri) else selectedUris.add(file.uri)
+        if (selectedUris.isEmpty()) selecting = false
+    }
+
     fun openFile(file: IndexedFile) {
-        try {
-            val uri = Uri.parse(file.uri)
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, file.mimeType ?: "*/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        if (file.category == "images" || file.category == "videos") previewFile = file
+        else openFileExternally(context, file)
+    }
+
+    val transferPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+        if (treeUri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { context.contentResolver.takePersistableUriPermission(treeUri, flags) }
+            val sources = files.filter { it.uri in selectedUris }
+            val moving = transferAsMove
+            scope.launch {
+                val results = withContext(Dispatchers.IO) {
+                    sources.map { FileOperations.transferToTree(context, it, treeUri, moving) }
+                }
+                withContext(Dispatchers.IO) {
+                    val db = FileIndexDatabase(context)
+                    try {
+                        if (moving) db.deleteFiles(sources.map { it.uri })
+                        db.upsertFiles(results.filter { it.success }.mapNotNull { it.file })
+                    } finally {
+                        db.close()
+                    }
+                }
+                val succeeded = results.count { it.success }
+                actionStatus = if (moving) "تم نقل $succeeded من ${sources.size} ملف." else "تم نسخ $succeeded من ${sources.size} ملف."
+                results.firstOrNull { !it.success }?.let { actionStatus = actionStatus + " " + it.message }
+                selectedUris.clear()
+                selecting = false
+                refreshKey++
             }
-            context.startActivity(intent)
-        } catch (error: Exception) {
-            android.widget.Toast.makeText(
-                context,
-                "تعذر فتح الملف: ${error.localizedMessage ?: "لا يوجد تطبيق مناسب"}",
-                android.widget.Toast.LENGTH_LONG
-            ).show()
         }
     }
 
-    fun shareFile(file: IndexedFile) {
-        try {
-            val send = Intent(Intent.ACTION_SEND).apply {
-                type = file.mimeType ?: "*/*"
-                putExtra(Intent.EXTRA_STREAM, Uri.parse(file.uri))
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(send, "مشاركة ${file.name}"))
-        } catch (error: Exception) {
-            android.widget.Toast.makeText(context, "تعذرت مشاركة الملف", android.widget.Toast.LENGTH_LONG).show()
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { treeUri ->
+        if (treeUri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { context.contentResolver.takePersistableUriPermission(treeUri, flags) }
+            pendingFolderTree = treeUri
+            showCreateFolderDialog = true
         }
     }
 
+    if (previewFile != null) {
+        MediaPreviewScreen(file = previewFile!!, onBack = { previewFile = null })
+        return
+    }
     if (detailFile != null) {
         FileDetailPanel(
             file = detailFile!!,
             onBack = { detailFile = null },
-            onOpen = { openFile(detailFile!!) },
-            onShare = { shareFile(detailFile!!) }
+            onOpen = { openFileExternally(context, detailFile!!) },
+            onShare = { shareIndexedFile(context, detailFile!!) },
+            onPreview = { previewFile = detailFile }
         )
         return
     }
 
-    val showingSubjectTiles = selected == "study" && selectedSubject == null
-    val showingExtensionTiles = selectedExtension == null &&
-        (selected != "study" || selectedSubject != null)
-
     Column(Modifier.fillMaxSize()) {
-        if (files.isNotEmpty()) {
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        when {
-                            selected == "study" && selectedSubject == null -> "${subjects.size} مادة دراسية"
-                            showingExtensionTiles -> "${extensions.size} امتدادات"
-                            else -> "${visibleFiles.size} ملف"
-                        },
-                        color = muted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Box {
-                        TextButton(onClick = { sortMenuExpanded = true }) {
-                            Icon(Icons.Rounded.Sort, null, modifier = Modifier.size(17.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(sortLabels.firstOrNull { it.first == sortMode }?.second ?: "ترتيب")
-                        }
-                        DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
-                            sortLabels.forEach { (key, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = { sortMode = key; sortMenuExpanded = false },
-                                    leadingIcon = { if (sortMode == key) Icon(Icons.Rounded.Check, null) }
-                                )
+        if (selecting) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 7.dp, vertical = 1.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("تحديد: ${selectedUris.size}", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                if (selectedUris.size == 1) {
+                    TextButton(onClick = {
+                        renameTarget = selectedFiles.firstOrNull()
+                        renameValue = renameTarget?.name.orEmpty()
+                        showRenameDialog = renameTarget != null
+                    }) {
+                        Icon(Icons.Rounded.Edit, null, modifier = Modifier.size(16.dp))
+                        Text("تسمية", fontSize = 10.sp)
+                    }
+                }
+                TextButton(onClick = {
+                    val uris = selectedFiles.map { Uri.parse(it.uri) }
+                    if (uris.isNotEmpty()) {
+                        runCatching {
+                            val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                                type = "*/*"
+                                putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                clipData = ClipData.newUri(context.contentResolver, "FileFlow files", uris.first()).apply {
+                                    uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+                                }
                             }
-                        }
+                            context.startActivity(Intent.createChooser(send, "مشاركة الملفات"))
+                        }.onFailure { actionStatus = "تعذرت مشاركة الملفات المحددة." }
                     }
+                }) { Icon(Icons.Rounded.Share, null, modifier = Modifier.size(16.dp)); Text("مشاركة", fontSize = 10.sp) }
+                TextButton(onClick = { transferAsMove = false; transferPicker.launch(null) }) {
+                    Icon(Icons.Rounded.ContentCopy, null, modifier = Modifier.size(16.dp)); Text("نسخ", fontSize = 10.sp)
                 }
-                if (selected == "study" && selectedSubject != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { selectedSubject = null; selectedExtension = null }) {
-                            Icon(Icons.Rounded.ArrowBack, null)
-                            Text("كل المواد")
-                        }
-                        Text(" / $selectedSubject", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { transferAsMove = true; transferPicker.launch(null) }) {
+                    Icon(Icons.Rounded.DriveFileMove, null, modifier = Modifier.size(16.dp)); Text("نقل", fontSize = 10.sp)
+                }
+                TextButton(onClick = { showDeleteDialog = true }) {
+                    Icon(Icons.Rounded.Delete, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                    Text("حذف", fontSize = 10.sp, color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = { selectedUris.clear(); selecting = false }) { Text("إلغاء", fontSize = 10.sp) }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, top = 0.dp, bottom = 0.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("$groupCount ${if (showingSubjectTiles) "مادة" else if (showingExtensionTiles) "امتداد" else "ملف"}", color = muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { folderPicker.launch(null) }) {
+                    Icon(Icons.Rounded.CreateNewFolder, null, modifier = Modifier.size(16.dp))
+                    Text("مجلد جديد", fontSize = 10.sp)
+                }
+                TextButton(onClick = { selecting = true }) {
+                    Icon(Icons.Rounded.Checklist, null, modifier = Modifier.size(16.dp))
+                    Text("تحديد", fontSize = 10.sp)
+                }
+                Box {
+                    IconButton(onClick = { sortMenuExpanded = true }, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Rounded.Sort, contentDescription = "الفرز", modifier = Modifier.size(19.dp))
                     }
-                }
-                if (selectedExtension != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { selectedExtension = null }) {
-                            Icon(Icons.Rounded.ArrowBack, null)
-                            Text("كل الامتدادات")
+                    DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
+                        sortLabels.forEach { (key, label) ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = { sortMode = key; sortMenuExpanded = false },
+                                leadingIcon = { if (sortMode == key) Icon(Icons.Rounded.Check, null) }
+                            )
                         }
-                        Text(" / $selectedExtension", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
+        }
+
+        actionStatus?.let {
+            Text(it, color = MaterialTheme.colorScheme.secondary, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 1.dp))
         }
 
         when {
@@ -815,40 +887,30 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         gridItems(groups, key = { it }) { group ->
-                            val count = if (showingSubjectTiles) {
-                                files.count { studySubjectLabel(it) == group }
-                            } else {
-                                subjectFiles.count { extensionLabel(it) == group }
-                            }
+                            val count = if (showingSubjectTiles) files.count { studySubjectLabel(it) == group }
+                            else extensionSource.count { extensionLabel(it) == group }
                             Card(
                                 modifier = Modifier.fillMaxWidth().clickable {
-                                    if (showingSubjectTiles) selectedSubject = group
-                                    else selectedExtension = group
+                                    if (showingSubjectTiles) onSubjectChange(group) else onExtensionChange(group)
                                 },
-                                shape = RoundedCornerShape(18.dp),
+                                shape = RoundedCornerShape(15.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                             ) {
-                                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                                Column(Modifier.fillMaxWidth().padding(12.dp)) {
                                     Icon(
                                         if (showingSubjectTiles) Icons.Rounded.School else Icons.Rounded.InsertDriveFile,
                                         contentDescription = null,
                                         tint = if (showingSubjectTiles) Color(0xFFB28AFF) else Color(0xFF53C6F0),
-                                        modifier = Modifier.size(28.dp)
+                                        modifier = Modifier.size(24.dp)
                                     )
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(group, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2)
-                                    Text("$count ملف", color = muted, fontSize = 11.sp)
-                                    Spacer(Modifier.height(6.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("فتح", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
-                                        Spacer(Modifier.weight(1f))
-                                        Icon(Icons.Rounded.ChevronLeft, null, tint = MaterialTheme.colorScheme.primary)
-                                    }
+                                    Spacer(Modifier.height(7.dp))
+                                    Text(group, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 2)
+                                    Text("$count ملف", color = muted, fontSize = 10.sp)
                                 }
                             }
                         }
@@ -859,19 +921,25 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(start = 7.dp, end = 7.dp, top = 2.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     gridItems(visibleFiles, key = { it.uri }) { file ->
+                        val isChosen = file.uri in selectedUris
                         Column(
-                            modifier = Modifier.fillMaxWidth().clickable { detailFile = file },
+                            modifier = Modifier.fillMaxWidth().combinedClickable(
+                                onClick = { if (selecting) toggleSelection(file) else openFile(file) },
+                                onLongClick = { selecting = true; if (!isChosen) selectedUris.add(file.uri) }
+                            ),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            MediaThumbnail(file, selected, Modifier.fillMaxWidth().aspectRatio(1f))
-                            Spacer(Modifier.height(4.dp))
-                            Text(file.name, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground)
-                            Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 10.sp, color = muted)
+                            Box {
+                                MediaThumbnail(file, selected, Modifier.fillMaxWidth().aspectRatio(1f))
+                                if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFF8B5CF6), modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
+                            }
+                            Text(file.name, maxLines = 1, fontSize = 10.sp, color = MaterialTheme.colorScheme.onBackground)
+                            Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 9.sp, color = muted)
                         }
                     }
                 }
@@ -880,27 +948,34 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 148.dp),
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     gridItems(visibleFiles, key = { it.uri }) { file ->
+                        val isChosen = file.uri in selectedUris
                         Card(
-                            modifier = Modifier.fillMaxWidth().clickable { detailFile = file },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            shape = RoundedCornerShape(14.dp)
+                            modifier = Modifier.fillMaxWidth().combinedClickable(
+                                onClick = { if (selecting) toggleSelection(file) else openFile(file) },
+                                onLongClick = { selecting = true; if (!isChosen) selectedUris.add(file.uri) }
+                            ),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isChosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+                            ),
+                            shape = RoundedCornerShape(13.dp)
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                                Icon(fileCategoryIcon(file.category), null, tint = brand, modifier = Modifier.size(30.dp))
-                                Spacer(Modifier.height(10.dp))
-                                Text(file.name, maxLines = 2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "${extensionLabel(file)} • ${formatBytes(file.sizeBytes)}",
-                                    maxLines = 2,
-                                    fontSize = 10.sp,
-                                    color = muted
-                                )
+                            Column(Modifier.fillMaxWidth().padding(9.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(fileCategoryIcon(file.category), null, tint = brand, modifier = Modifier.size(25.dp))
+                                    Spacer(Modifier.weight(1f))
+                                    IconButton(onClick = { detailFile = file }, modifier = Modifier.size(29.dp)) {
+                                        Icon(Icons.Rounded.Info, contentDescription = "تفاصيل الملف", tint = muted, modifier = Modifier.size(17.dp))
+                                    }
+                                    if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = brand, modifier = Modifier.size(17.dp))
+                                }
+                                Spacer(Modifier.height(5.dp))
+                                Text(file.name, maxLines = 2, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                Text("${extensionLabel(file)} • ${formatBytes(file.sizeBytes)}", maxLines = 1, fontSize = 9.sp, color = muted)
                             }
                         }
                     }
@@ -909,31 +984,193 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
             else -> {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 1.dp)
                 ) {
                     items(visibleFiles, key = { it.uri }) { file ->
+                        val isChosen = file.uri in selectedUris
                         ListItem(
                             headlineContent = { Text(file.name, maxLines = 2) },
                             supportingContent = {
-                                Text(
-                                    "${extensionLabel(file)} • ${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
-                                    color = muted,
-                                    fontSize = 11.sp
-                                )
+                                Text("${extensionLabel(file)} • ${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}", color = muted, fontSize = 10.sp)
                             },
-                            leadingContent = {
-                                if (selected == "images" || selected == "videos") {
-                                    MediaThumbnail(file, selected, Modifier.size(58.dp))
-                                } else {
-                                    Icon(fileCategoryIcon(file.category), null, tint = brand)
+                            leadingContent = { Icon(fileCategoryIcon(file.category), null, tint = if (isChosen) MaterialTheme.colorScheme.primary else brand) },
+                            trailingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { detailFile = file }) { Icon(Icons.Rounded.Info, contentDescription = "تفاصيل الملف") }
+                                    if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = brand)
                                 }
                             },
-                            modifier = Modifier.clickable { detailFile = file }
+                            modifier = Modifier.combinedClickable(
+                                onClick = { if (selecting) toggleSelection(file) else openFile(file) },
+                                onLongClick = { selecting = true; if (!isChosen) selectedUris.add(file.uri) }
+                            )
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
             }
+        }
+    }
+
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text("إعادة تسمية الملف") },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    singleLine = true,
+                    label = { Text("الاسم الجديد") }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = renameTarget
+                    showRenameDialog = false
+                    if (target != null) scope.launch {
+                        val result = withContext(Dispatchers.IO) { FileOperations.rename(context, target, renameValue) }
+                        if (result.success && result.file != null) {
+                            withContext(Dispatchers.IO) {
+                                val db = FileIndexDatabase(context)
+                                try {
+                                    db.deleteFiles(listOf(target.uri))
+                                    db.upsertFiles(listOf(result.file))
+                                } finally { db.close() }
+                            }
+                            actionStatus = result.message
+                            refreshKey++
+                        } else actionStatus = result.message
+                        selectedUris.clear()
+                        selecting = false
+                    }
+                }) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { showRenameDialog = false }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("حذف الملفات المحددة؟") },
+            text = { Text("سيتم حذف ${selectedFiles.size} ملف من التخزين. لا يمكن التراجع عن الحذف.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    val toDelete = selectedFiles
+                    scope.launch {
+                        val results = withContext(Dispatchers.IO) { toDelete.map { it to FileOperations.delete(context, it) } }
+                        withContext(Dispatchers.IO) {
+                            val db = FileIndexDatabase(context)
+                            try { db.deleteFiles(results.filter { it.second.success }.map { it.first.uri }) }
+                            finally { db.close() }
+                        }
+                        val done = results.count { it.second.success }
+                        actionStatus = "تم حذف $done من ${toDelete.size} ملف."
+                        results.firstOrNull { !it.second.success }?.let { actionStatus += " ${it.second.message}" }
+                        selectedUris.clear()
+                        selecting = false
+                        refreshKey++
+                    }
+                }) { Text("حذف", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showCreateFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateFolderDialog = false },
+            title = { Text("إنشاء مجلد جديد") },
+            text = {
+                OutlinedTextField(value = folderName, onValueChange = { folderName = it }, singleLine = true, label = { Text("اسم المجلد") })
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val parent = pendingFolderTree
+                    val name = folderName
+                    showCreateFolderDialog = false
+                    if (parent != null) scope.launch {
+                        val result = withContext(Dispatchers.IO) { FileOperations.createFolder(context, parent, name) }
+                        actionStatus = result.message
+                        folderName = ""
+                    }
+                }) { Text("إنشاء") }
+            },
+            dismissButton = { TextButton(onClick = { showCreateFolderDialog = false }) { Text("إلغاء") } }
+        )
+    }
+}
+
+private fun openFileExternally(context: android.content.Context, file: IndexedFile) {
+    runCatching {
+        val uri = Uri.parse(file.uri)
+        val mime = FileOperations.mimeType(context, file)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newUri(context.contentResolver, file.name, uri)
+        }
+        context.startActivity(Intent.createChooser(intent, "فتح ${file.name}"))
+    }.onFailure { error ->
+        android.widget.Toast.makeText(
+            context,
+            "تعذر فتح الملف. تحقق من الصلاحية أو ثبّت تطبيقًا يدعم هذا النوع. ${error.localizedMessage ?: ""}",
+            android.widget.Toast.LENGTH_LONG
+        ).show()
+    }
+}
+
+private fun shareIndexedFile(context: android.content.Context, file: IndexedFile) {
+    runCatching {
+        val uri = Uri.parse(file.uri)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = FileOperations.mimeType(context, file)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newUri(context.contentResolver, file.name, uri)
+        }
+        context.startActivity(Intent.createChooser(intent, "مشاركة ${file.name}"))
+    }.onFailure {
+        android.widget.Toast.makeText(context, "تعذرت مشاركة الملف المحدد.", android.widget.Toast.LENGTH_LONG).show()
+    }
+}
+
+@Composable
+private fun MediaPreviewScreen(file: IndexedFile, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    BackHandler { onBack() }
+    Column(Modifier.fillMaxSize().background(Color.Black)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF111326)).padding(horizontal = 5.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع", tint = Color.White) }
+            Text(file.name, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
+        }
+        if (file.category == "images") {
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(Uri.parse(file.uri)).crossfade(true).build(),
+                contentDescription = file.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth().weight(1f)
+            )
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    VideoView(ctx).apply {
+                        val player = this
+                        val controls = MediaController(ctx)
+                        controls.setAnchorView(player)
+                        setMediaController(controls)
+                        setVideoURI(Uri.parse(file.uri))
+                        setOnPreparedListener { mediaPlayer -> mediaPlayer.start() }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                onRelease = { it.stopPlayback() }
+            )
         }
     }
 }
@@ -943,70 +1180,55 @@ private fun FileDetailPanel(
     file: IndexedFile,
     onBack: () -> Unit,
     onOpen: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onPreview: () -> Unit
 ) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
             Column(Modifier.weight(1f)) {
-                Text("تفاصيل الملف", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
-                Text(file.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 2)
+                Text("تفاصيل الملف", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp)
+                Text(file.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 2)
             }
         }
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(17.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             if (file.category == "images" || file.category == "videos") {
-                MediaThumbnail(
-                    file,
-                    file.category,
-                    Modifier.fillMaxWidth().height(270.dp)
-                )
+                MediaThumbnail(file, file.category, Modifier.fillMaxWidth().height(175.dp))
             } else {
                 Box(
-                    Modifier.fillMaxWidth().height(210.dp).background(
-                        Brush.linearGradient(listOf(Color(0xFF26164F), Color(0xFF102A46)))
-                    ),
+                    Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(listOf(Color(0xFF26164F), Color(0xFF102A46)))),
                     contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        fileCategoryIcon(file.category),
-                        contentDescription = null,
-                        tint = Color(0xFFB99AFF),
-                        modifier = Modifier.size(86.dp)
-                    )
-                }
+                ) { Icon(fileCategoryIcon(file.category), null, tint = Color(0xFFB99AFF), modifier = Modifier.size(50.dp)) }
             }
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Text(file.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 3)
-                Text(
-                    "${extensionLabel(file)} • ${formatBytes(file.sizeBytes)}",
-                    color = muted,
-                    fontSize = 12.sp
-                )
+            Column(Modifier.fillMaxWidth().padding(11.dp)) {
+                Text(file.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
+                Text("${extensionLabel(file)} • ${formatBytes(file.sizeBytes)}", color = muted, fontSize = 10.sp)
             }
         }
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(15.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     Button(onClick = onOpen, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.OpenInNew, null)
-                        Spacer(Modifier.width(5.dp))
-                        Text("فتح")
+                        Icon(Icons.Rounded.OpenInNew, null); Spacer(Modifier.width(3.dp)); Text("فتح خارجي")
                     }
                     OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.Share, null)
-                        Spacer(Modifier.width(5.dp))
-                        Text("مشاركة")
+                        Icon(Icons.Rounded.Share, null); Spacer(Modifier.width(3.dp)); Text("مشاركة")
+                    }
+                }
+                if (file.category == "images" || file.category == "videos") {
+                    OutlinedButton(onClick = onPreview, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.Fullscreen, null); Spacer(Modifier.width(4.dp)); Text("معاينة داخل FileFlow")
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -1015,17 +1237,11 @@ private fun FileDetailPanel(
                 DetailInfoRow("الحجم", formatBytes(file.sizeBytes))
                 DetailInfoRow(
                     "آخر تعديل",
-                    if (file.modifiedSeconds > 0L) {
-                        java.text.DateFormat.getDateTimeInstance().format(java.util.Date(file.modifiedSeconds * 1000L))
-                    } else "غير متاح"
+                    if (file.modifiedSeconds > 0L) java.text.DateFormat.getDateTimeInstance().format(java.util.Date(file.modifiedSeconds * 1000L))
+                    else "غير متاح"
                 )
             }
         }
-        Text(
-            "الملف الأصلي لم يتم نقله أو تعديله. يمكن فتحه أو مشاركته من مكانه الحالي.",
-            color = muted,
-            fontSize = 11.sp
-        )
     }
 }
 
