@@ -320,8 +320,8 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(15.dp)
             ) {
-                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Folder, null, tint = Color(0xFF16A34A))
+                Row(Modifier.fillMaxWidth().padding(start = if (custom.third != null) 30.dp else 14.dp, end = 14.dp, top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (custom.third != null) Icons.Rounded.SubdirectoryArrowRight else Icons.Rounded.Folder, null, tint = Color(0xFF16A34A))
                     Spacer(Modifier.width(10.dp))
                     Text(custom.second, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
