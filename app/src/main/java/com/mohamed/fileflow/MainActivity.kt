@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,7 +54,7 @@ private val categories = listOf(
 private val ink = Color(0xFF172033)
 private val muted = Color(0xFF788397)
 private val canvas = Color(0xFFF4F6FA)
-private val brand = Color(0xFF5367D8)
+private val brand = Color(0xFF8B5CF6)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -65,27 +66,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun FileFlowApp() {
     var selected by rememberSaveable { mutableStateOf("home") }
+    val history = remember { mutableStateListOf<String>() }
     var query by rememberSaveable { mutableStateOf("") }
-    var dark by rememberSaveable { mutableStateOf(false) }
-    var gridView by rememberSaveable { mutableStateOf(false) }
+    var dark by rememberSaveable { mutableStateOf(true) }
+    var gridView by rememberSaveable { mutableStateOf(true) }
     var sortByName by rememberSaveable { mutableStateOf(true) }
 
+    fun navigate(target: String) {
+        if (target != selected) { history.add(selected); selected = target }
+    }
+    fun goBack() {
+        selected = if (history.isNotEmpty()) history.removeAt(history.lastIndex) else "home"
+    }
+    BackHandler(enabled = selected != "home") { goBack() }
+
     val scheme = if (dark) darkColorScheme(
-        primary = Color(0xFF9AA8FF),
-        background = Color(0xFF101522),
-        surface = Color(0xFF1A2232),
-        onBackground = Color(0xFFF1F3F8),
-        onSurface = Color(0xFFF1F3F8),
-        surfaceVariant = Color(0xFF273248),
-        onSurfaceVariant = Color(0xFFD0D7E5)
+        primary = Color(0xFF9D70FF), secondary = Color(0xFF31D6F2), tertiary = Color(0xFFE879F9),
+        background = Color(0xFF090B1B), surface = Color(0xFF151832),
+        onBackground = Color(0xFFF4F1FF), onSurface = Color(0xFFF4F1FF),
+        surfaceVariant = Color(0xFF24264A), onSurfaceVariant = Color(0xFFC4C4E3)
     ) else lightColorScheme(
-        primary = brand,
-        background = canvas,
-        surface = Color.White,
-        onBackground = ink,
-        onSurface = ink,
-        surfaceVariant = Color(0xFFEBEFF6),
-        onSurfaceVariant = Color(0xFF596579)
+        primary = Color(0xFF7045D8), secondary = Color(0xFF168EA8),
+        background = Color(0xFFF5F2FF), surface = Color.White,
+        onBackground = ink, onSurface = ink,
+        surfaceVariant = Color(0xFFECE7FA), onSurfaceVariant = Color(0xFF596579)
     )
 
     MaterialTheme(colorScheme = scheme) {
@@ -102,7 +106,7 @@ private fun FileFlowApp() {
                     destinations.forEach { (id, label, icon) ->
                         NavigationBarItem(
                             selected = selected == id || (id == "all" && categories.any { it.id == selected }),
-                            onClick = { selected = id },
+                            onClick = { history.clear(); selected = id },
                             icon = { Icon(icon, contentDescription = label) },
                             label = { Text(label, fontSize = 11.sp) }
                         )
@@ -112,24 +116,16 @@ private fun FileFlowApp() {
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
                 TopHeader(
-                    query = query,
-                    onQuery = { query = it },
-                    onSearch = { selected = "all" },
-                    onSettings = { selected = "settings" },
-                    dark = dark,
-                    onTheme = { dark = !dark }
+                    query = query, onQuery = { query = it }, onSearch = { navigate("all") },
+                    onSettings = { navigate("settings") }, dark = dark, onTheme = { dark = !dark }
                 )
                 when (selected) {
-                    "home" -> HomeScreen(onNavigate = { selected = it }, onCategory = { selected = it })
+                    "home" -> HomeScreen(onNavigate = { navigate(it) }, onCategory = { navigate(it) })
                     "settings" -> SettingsScreen(dark = dark, onTheme = { dark = it })
                     else -> ArchiveScreen(
-                        selected = selected,
-                        query = query,
-                        gridView = gridView,
-                        sortByName = sortByName,
-                        onCategory = { selected = it },
-                        onGridToggle = { gridView = !gridView },
-                        onSortToggle = { sortByName = !sortByName }
+                        selected = selected, query = query, gridView = gridView, sortByName = sortByName,
+                        onCategory = { navigate(it) }, onBack = { goBack() },
+                        onGridToggle = { gridView = !gridView }, onSortToggle = { sortByName = !sortByName }
                     )
                 }
             }
@@ -203,27 +199,7 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         item {
             StorageAccessPanel()
         }
-        item {
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), shape = RoundedCornerShape(20.dp)) {
-                Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Rounded.Storage, null, tint = brand)
-                        Spacer(Modifier.width(8.dp))
-                        Text("مساحة الجهاز", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        Spacer(Modifier.weight(1f))
-                        Surface(color = brand.copy(alpha = 0.10f), shape = RoundedCornerShape(30.dp)) {
-                            Text("غير متصل", color = brand, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp))
-                        }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text("بيانات التخزين غير متاحة في هذه المرحلة", color = muted, fontSize = 13.sp)
-                    Spacer(Modifier.height(10.dp))
-                    LinearProgressIndicator(progress = { 0f }, modifier = Modifier.fillMaxWidth(), color = brand, trackColor = MaterialTheme.colorScheme.surfaceVariant)
-                    Spacer(Modifier.height(8.dp))
-                    Text("لن نعرض أرقامًا تقديرية. ستُقرأ المساحة من Android بعد تنفيذ الربط.", color = muted, fontSize = 11.sp)
-                }
-            }
-        }
+        item { DeviceStorageCard() }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("تصفح حسب النوع", fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -275,6 +251,7 @@ private fun ArchiveScreen(
     gridView: Boolean,
     sortByName: Boolean,
     onCategory: (String) -> Unit,
+    onBack: () -> Unit,
     onGridToggle: () -> Unit,
     onSortToggle: () -> Unit
 ) {
@@ -292,9 +269,14 @@ private fun ArchiveScreen(
     }.let { if (sortByName) it.sortedBy(FileCategory::title) else it }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
-            Text(if (category == null) "الأرشيف الذكي" else "الأرشيف / " + category.title, color = brand, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
+                Column(Modifier.weight(1f)) {
+                    Text(if (category == null) "الأرشيف الذكي" else "الأرشيف / " + category.title, color = brand, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Text(title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                }
+            }
             if (category != null) {
                 Spacer(Modifier.height(5.dp))
                 Text(category.description, color = muted, fontSize = 12.sp)
