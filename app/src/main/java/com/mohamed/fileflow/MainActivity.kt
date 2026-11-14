@@ -402,7 +402,7 @@ private fun IndexedSearchResults(query: String) {
                 ListItem(
                     headlineContent = { Text(file.name, maxLines = 1) },
                     supportingContent = {
-                        Text("${file.category} • ${file.mimeType ?: "نوع غير معروف"} • ${file.sizeBytes} بايت", color = muted, fontSize = 11.sp)
+                        Text("${file.category} • ${file.mimeType ?: "نوع غير معروف"} • ${if (file.sizeBytes < 0L) "حجم غير معروف" else "${file.sizeBytes} بايت"}", color = muted, fontSize = 11.sp)
                     },
                     leadingContent = { Icon(Icons.Rounded.InsertDriveFile, contentDescription = null, tint = brand) },
                     modifier = Modifier.clickable {
@@ -465,7 +465,7 @@ private fun IndexedFilesContent(selected: String, query: String) {
                     headlineContent = { Text(file.name, maxLines = 1) },
                     supportingContent = {
                         Text(
-                            "${file.mimeType ?: "نوع غير معروف"} • ${file.sizeBytes} بايت",
+                            "${file.mimeType ?: "نوع غير معروف"} • ${if (file.sizeBytes < 0L) "حجم غير معروف" else "${file.sizeBytes} بايت"}",
                             color = muted,
                             fontSize = 11.sp
                         )
