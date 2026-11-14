@@ -7,7 +7,6 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
 import android.content.ContentUris
-import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +14,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -42,7 +44,15 @@ fun formatBytes(bytes: Long): String {
 
 @Composable
 fun DeviceStorageCard() {
-    val info = remember { readDeviceStorage() }
+    var info by remember { mutableStateOf(readDeviceStorage()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) info = readDeviceStorage()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val progress = if (info.total > 0) info.used.toFloat() / info.total else 0f
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -53,9 +63,9 @@ fun DeviceStorageCard() {
             Row {
                 Icon(Icons.Rounded.Storage, null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(8.dp))
-                Text("مساحة الجهاز", style = MaterialTheme.typography.titleMedium)
+                Text("مساحة التخزين الداخلي", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
-                Text("قراءة مباشرة من Android", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text("تتحدث عند العودة للتطبيق", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.height(14.dp))
             Text(formatBytes(info.used) + " مستخدم من " + formatBytes(info.total), style = MaterialTheme.typography.titleLarge)
@@ -66,6 +76,11 @@ fun DeviceStorageCard() {
                 Text("المتاح: " + formatBytes(info.available), style = MaterialTheme.typography.bodySmall)
                 Text("المستخدم: " + String.format(Locale.getDefault(), "%.0f%%", progress * 100), style = MaterialTheme.typography.bodySmall)
             }
+            Text(
+                "تعرض هذه القراءة سعة التخزين الداخلي الذي يقدمه Android؛ وحدات USB أو بطاقات التخزين المنفصلة لا تُعرض كسعات مستقلة هنا.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -77,14 +92,6 @@ object AllFilesIndexer {
         else -> ContextCompat.checkSelfPermission(
             context, Manifest.permission.READ_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    private fun safeDisplayName(raw: String?): String {
-        val value = raw?.takeIf { it.isNotBlank() } ?: "بدون اسم"
-        // Some providers expose percent-encoded UTF-8 names as display names.
-        return if (Regex("(%[0-9A-Fa-f]{2}){2,}").containsMatchIn(value)) {
-            runCatching { Uri.decode(value) }.getOrDefault(value)
-        } else value
     }
 
     fun scan(context: Context): List<IndexedFile> {
@@ -110,7 +117,7 @@ object AllFilesIndexer {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val mime = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol)
-                val name = safeDisplayName(cursor.getString(nameCol))
+                val name = cursor.getString(nameCol)?.takeIf { it.isNotBlank() } ?: "بدون اسم"
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
                     name = name,
