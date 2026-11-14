@@ -114,6 +114,44 @@ class FileIndexDatabase(context: Context) :
         }
     }
 
+    fun upsertFiles(files: List<IndexedFile>) {
+        if (files.isEmpty()) return
+        writableDatabase.beginTransaction()
+        try {
+            files.forEach { file ->
+                val values = ContentValues().apply {
+                    put("uri", file.uri)
+                    put("name", file.name)
+                    put("mime_type", file.mimeType)
+                    put("size_bytes", file.sizeBytes)
+                    put("modified_seconds", file.modifiedSeconds)
+                    put("category", file.category)
+                    put("source", file.source)
+                }
+                val row = writableDatabase.insertWithOnConflict(
+                    "indexed_files", null, values, SQLiteDatabase.CONFLICT_REPLACE
+                )
+                if (row == -1L) throw SQLiteException("Failed to update file metadata")
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
+    fun deleteFiles(uris: Collection<String>) {
+        if (uris.isEmpty()) return
+        writableDatabase.beginTransaction()
+        try {
+            uris.forEach { uri ->
+                writableDatabase.delete("indexed_files", "uri = ?", arrayOf(uri))
+            }
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
+    }
+
     fun allFiles(): List<IndexedFile> {
         val result = mutableListOf<IndexedFile>()
         readableDatabase.query(
