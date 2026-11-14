@@ -38,6 +38,8 @@ class FileClassifierTest {
         assertEquals("study", FileClassifier.classify("محاضرات فسيولوجي.kt", "text/plain"))
         assertEquals("وراثة", FileClassifier.studySubject("Genetics_Lecture_02.pdf"))
         assertEquals("فسيولوجي", FileClassifier.studySubject("ملخص فسيولوجيا النبات.pdf"))
+        assertEquals("زراعة أنسجة", FileClassifier.studySubject("Plant_Tissue_Culture_Notes.pdf"))
+        assertEquals("بيوتكنولوجي", FileClassifier.studySubject("Introduction_to_Biotechnology.pdf"))
     }
 
     @Test
