@@ -1,5 +1,7 @@
 package com.mohamed.fileflow
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -25,6 +27,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private data class FileCategory(
     val id: String,
@@ -356,8 +360,81 @@ private fun ArchiveScreen(
                 }
                 EmptyState(icon, message, "لن تظهر نتائج قبل ربط الهاتف وفهرسة الملفات في المرحلة الثانية.")
             }
+            selected in listOf("images", "videos", "audio", "other", "empty") -> {
+                IndexedFilesContent(selected)
+            }
             else -> {
-                EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "لا توجد ملفات معروضة", "ستظهر الملفات الحقيقية هنا بعد ربط Android ومنح صلاحيات الوصول في المرحلة الثانية.")
+                EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "لن نصنّف الملفات تلقائيًا دون أدلة كافية. اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun IndexedFilesContent(selected: String) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var files by remember(selected) { mutableStateOf<List<IndexedFile>>(emptyList()) }
+
+    LaunchedEffect(selected) {
+        files = withContext(Dispatchers.IO) {
+            val database = FileIndexDatabase(context)
+            val all = database.allFiles()
+            database.close()
+            when (selected) {
+                "empty" -> all.filter { it.sizeBytes == 0L }
+                else -> all.filter { it.category == selected }
+            }.sortedBy { it.name.lowercase() }
+        }
+    }
+
+    if (files.isEmpty()) {
+        EmptyState(
+            Icons.Rounded.FolderOpen,
+            "لا توجد ملفات مفهرسة في هذا القسم",
+            "امنح صلاحية الوسائط أو اختر مجلدًا من الصفحة الرئيسية، ثم ارجع إلى هذا القسم."
+        )
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+        ) {
+            items(files, key = { it.uri }) { file ->
+                ListItem(
+                    headlineContent = { Text(file.name, maxLines = 1) },
+                    supportingContent = {
+                        Text(
+                            "${file.mimeType ?: "نوع غير معروف"} • ${file.sizeBytes} بايت",
+                            color = muted,
+                            fontSize = 11.sp
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            when (file.category) {
+                                "images" -> Icons.Rounded.Image
+                                "videos" -> Icons.Rounded.PlayCircle
+                                "audio" -> Icons.Rounded.MusicNote
+                                else -> Icons.Rounded.InsertDriveFile
+                            },
+                            contentDescription = null,
+                            tint = brand
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        try {
+                            val uri = Uri.parse(file.uri)
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, file.mimeType ?: "*/*")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            // The URI may have been revoked or no compatible viewer may be installed.
+                        }
+                    }
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
     }
