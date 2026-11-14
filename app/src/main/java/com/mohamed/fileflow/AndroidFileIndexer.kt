@@ -180,7 +180,7 @@ object AndroidFileIndexer {
                     uri = ContentUris.withAppendedId(collection, id).toString(),
                     name = cursor.getString(nameCol) ?: "بدون اسم",
                     mimeType = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol),
-                    sizeBytes = if (cursor.isNull(sizeCol)) 0L else cursor.getLong(sizeCol),
+                    sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
                     category = category,
                     source = source
@@ -188,6 +188,25 @@ object AndroidFileIndexer {
             }
         }
         return rows
+    }
+
+    private fun queryDocumentSize(context: Context, uri: Uri): Long? {
+        return try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(android.provider.DocumentsContract.Document.COLUMN_SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val column = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_SIZE)
+                    if (column >= 0 && !cursor.isNull(column)) cursor.getLong(column) else null
+                } else null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     fun scanPickedTree(context: Context, treeUri: Uri): List<IndexedFile> {
@@ -205,7 +224,7 @@ object AndroidFileIndexer {
                 directory.listFiles()
             } catch (_: SecurityException) {
                 return
-            } catch (_: IllegalStateException) {
+            } catch (_: Exception) {
                 return
             }
 
@@ -225,7 +244,7 @@ object AndroidFileIndexer {
                                 uri = child.uri.toString(),
                                 name = child.name ?: "بدون اسم",
                                 mimeType = mime,
-                                sizeBytes = child.length(),
+                                sizeBytes = queryDocumentSize(context, child.uri) ?: -1L,
                                 modifiedSeconds = child.lastModified() / 1000L,
                                 category = category,
                                 source = "saf:${treeUri}"
@@ -234,7 +253,7 @@ object AndroidFileIndexer {
                     }
                 } catch (_: SecurityException) {
                     // A revoked or restricted child must not stop the whole scan.
-                } catch (_: IllegalStateException) {
+                } catch (_: Exception) {
                     // Providers can invalidate a document while enumeration is running.
                 }
             }
