@@ -536,9 +536,9 @@ private fun ArchiveScreen(
                 }
             }) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
             Text("الأرشيف", color = brand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            if (category != null || selected == "all") {
+            if (category != null || selected == "all" || selected == "system") {
                 Text("  /  ", color = muted)
-                Text(category?.title ?: title, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
+                Text(if (selected == "system") "ملفات النظام" else category?.title ?: title, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
             }
             selectedSubject?.let {
                 Text("  /  ", color = muted)
@@ -610,7 +610,8 @@ private fun ArchiveScreen(
                 }
                 EmptyState(icon, "القسم غير مربوط بعد", "يلزم تنفيذ سجل الاستخدام والمفضلة وفحص بصمات التكرار قبل عرض نتائج حقيقية.")
             }
-            selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") || selected.startsWith("custom:") -> {
+            selected.startsWith("custom:") -> CustomCategoryScreen(selected, query, onCategory)
+            selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
                 IndexedFilesContent(
                     selected = selected,
                     query = query,
@@ -687,6 +688,50 @@ private fun SystemFilesScreen() {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CustomCategoryScreen(categoryId: String, query: String, onCategory: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var children by remember(categoryId) { mutableStateOf<List<Triple<String, String, String?>>>(emptyList()) }
+    LaunchedEffect(categoryId) {
+        children = withContext(Dispatchers.IO) {
+            val db = FileIndexDatabase(context)
+            try { db.customCategories().filter { it.third == categoryId } } finally { db.close() }
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
+        if (children.isNotEmpty()) {
+            Text("الفئات الفرعية", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp))
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 190.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 3.dp)) {
+                items(children, key = { it.first }) { child ->
+                    Card(
+                        Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable { onCategory(child.first) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Folder, null, tint = Color(0xFF16A34A))
+                            Spacer(Modifier.width(9.dp))
+                            Text(child.second, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
+                        }
+                    }
+                }
+            }
+        }
+        IndexedFilesContent(
+            selected = categoryId,
+            query = query,
+            gridView = true,
+            onGridToggle = {},
+            selectedSubject = null,
+            onSubjectChange = {},
+            selectedExtension = null,
+            onExtensionChange = {},
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
