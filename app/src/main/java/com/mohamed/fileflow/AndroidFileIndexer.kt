@@ -35,7 +35,7 @@ data class TreeScanResult(
 )
 
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 1) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -56,7 +56,28 @@ class FileIndexDatabase(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Versioned migrations will be added here before changing the schema.
+        if (oldVersion < 2) {
+            // Reclassify already-indexed rows using the semantic filename rules.
+            // No source file is opened or modified; only local metadata changes.
+            db.query(
+                "indexed_files",
+                arrayOf("uri", "name", "mime_type"),
+                null, null, null, null, null
+            ).use { cursor ->
+                val uriIndex = cursor.getColumnIndexOrThrow("uri")
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val mimeIndex = cursor.getColumnIndexOrThrow("mime_type")
+                while (cursor.moveToNext()) {
+                    val uri = cursor.getString(uriIndex)
+                    val name = cursor.getString(nameIndex)
+                    val mime = if (cursor.isNull(mimeIndex)) null else cursor.getString(mimeIndex)
+                    val values = ContentValues().apply {
+                        put("category", FileClassifier.classify(name, mime))
+                    }
+                    db.update("indexed_files", values, "uri = ?", arrayOf(uri))
+                }
+            }
+        }
     }
 
     fun replaceSource(source: String, files: List<IndexedFile>) {
