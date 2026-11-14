@@ -19,7 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import coil.request.videoFrameMillis
+import coil.request.videoFramePercent
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -486,7 +486,7 @@ private fun MediaThumbnail(file: IndexedFile, selected: String, modifier: Modifi
         model = ImageRequest.Builder(context)
             .data(Uri.parse(file.uri))
             .crossfade(true)
-            .apply { if (selected == "videos") videoFrameMillis(1000L) }
+            .apply { if (selected == "videos") videoFramePercent(0.1) }
             .build(),
         contentDescription = file.name,
         placeholder = painterResource(R.drawable.ic_media_placeholder),
