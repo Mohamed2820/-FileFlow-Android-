@@ -616,6 +616,8 @@ private fun studySubjectLabel(file: IndexedFile): String =
 private fun IndexedFilesContent(selected: String, query: String, gridView: Boolean) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var files by remember(selected, query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
+    var detailFile by remember(selected) { mutableStateOf<IndexedFile?>(null) }
+    BackHandler(enabled = detailFile != null) { detailFile = null }
     var selectedSubject by remember(selected) { mutableStateOf<String?>(null) }
     var selectedExtension by remember(selected) { mutableStateOf<String?>(null) }
     var sortMode by remember(selected) { mutableStateOf("name_asc") }
@@ -691,6 +693,29 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 android.widget.Toast.LENGTH_LONG
             ).show()
         }
+    }
+
+    fun shareFile(file: IndexedFile) {
+        try {
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = file.mimeType ?: "*/*"
+                putExtra(Intent.EXTRA_STREAM, Uri.parse(file.uri))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(send, "مشاركة ${file.name}"))
+        } catch (error: Exception) {
+            android.widget.Toast.makeText(context, "تعذرت مشاركة الملف", android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
+
+    if (detailFile != null) {
+        FileDetailPanel(
+            file = detailFile!!,
+            onBack = { detailFile = null },
+            onOpen = { openFile(detailFile!!) },
+            onShare = { shareFile(detailFile!!) }
+        )
+        return
     }
 
     val showingSubjectTiles = selected == "study" && selectedSubject == null
@@ -813,7 +838,7 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 ) {
                     gridItems(visibleFiles, key = { it.uri }) { file ->
                         Column(
-                            modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
+                            modifier = Modifier.fillMaxWidth().clickable { detailFile = file },
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             MediaThumbnail(file, selected, Modifier.fillMaxWidth().aspectRatio(1f))
@@ -883,6 +908,105 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FileDetailPanel(
+    file: IndexedFile,
+    onBack: () -> Unit,
+    onOpen: () -> Unit,
+    onShare: () -> Unit
+) {
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
+            Column(Modifier.weight(1f)) {
+                Text("تفاصيل الملف", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
+                Text(file.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, maxLines = 2)
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            if (file.category == "images" || file.category == "videos") {
+                MediaThumbnail(
+                    file,
+                    file.category,
+                    Modifier.fillMaxWidth().height(270.dp)
+                )
+            } else {
+                Box(
+                    Modifier.fillMaxWidth().height(210.dp).background(
+                        Brush.linearGradient(listOf(Color(0xFF26164F), Color(0xFF102A46)))
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        fileCategoryIcon(file.category),
+                        contentDescription = null,
+                        tint = Color(0xFFB99AFF),
+                        modifier = Modifier.size(86.dp)
+                    )
+                }
+            }
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text(file.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 3)
+                Text(
+                    "${extensionLabel(file)} • ${formatBytes(file.sizeBytes)}",
+                    color = muted,
+                    fontSize = 12.sp
+                )
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(15.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = onOpen, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Rounded.OpenInNew, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("فتح")
+                    }
+                    OutlinedButton(onClick = onShare, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Rounded.Share, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("مشاركة")
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                DetailInfoRow("النوع", file.mimeType ?: "غير معروف")
+                DetailInfoRow("الامتداد", extensionLabel(file))
+                DetailInfoRow("الحجم", formatBytes(file.sizeBytes))
+                DetailInfoRow(
+                    "آخر تعديل",
+                    if (file.modifiedSeconds > 0L) {
+                        java.text.DateFormat.getDateTimeInstance().format(java.util.Date(file.modifiedSeconds * 1000L))
+                    } else "غير متاح"
+                )
+            }
+        }
+        Text(
+            "الملف الأصلي لم يتم نقله أو تعديله. يمكن فتحه أو مشاركته من مكانه الحالي.",
+            color = muted,
+            fontSize = 11.sp
+        )
+    }
+}
+
+@Composable
+private fun DetailInfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text(label, color = muted, fontSize = 12.sp, modifier = Modifier.weight(0.35f))
+        Text(value, fontSize = 12.sp, modifier = Modifier.weight(0.65f), textAlign = TextAlign.End)
     }
 }
 
