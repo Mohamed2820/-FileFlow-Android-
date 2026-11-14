@@ -172,7 +172,7 @@ object AllFilesIndexer {
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
                 val mime = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol)
-                val name = cursor.getString(nameCol)?.takeIf { it.isNotBlank() } ?: "بدون اسم"
+                val name = cursor.getString(nameCol)?.takeIf { it.isNotBlank() }?.let(android.net.Uri::decode) ?: "بدون اسم"
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
                     name = name,
