@@ -11,7 +11,6 @@ import android.database.sqlite.SQLiteException
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import java.util.ArrayDeque
@@ -36,7 +35,7 @@ data class TreeScanResult(
 )
 
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 4) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -54,17 +53,9 @@ class FileIndexDatabase(context: Context) :
         )
         db.execSQL("CREATE INDEX idx_indexed_files_category ON indexed_files(category)")
         db.execSQL("CREATE INDEX idx_indexed_files_name ON indexed_files(name)")
-        db.execSQL("CREATE TABLE custom_categories (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, parent_id TEXT, sort_order INTEGER NOT NULL DEFAULT 0)")
-        db.execSQL("CREATE TABLE file_category_overrides (uri TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL)")
-        db.execSQL("CREATE INDEX idx_file_category_overrides_category ON file_category_overrides(category_id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 4) {
-            db.execSQL("CREATE TABLE IF NOT EXISTS custom_categories (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, parent_id TEXT, sort_order INTEGER NOT NULL DEFAULT 0)")
-            db.execSQL("CREATE TABLE IF NOT EXISTS file_category_overrides (uri TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_file_category_overrides_category ON file_category_overrides(category_id)")
-        }
         if (oldVersion < 3) {
             // Reclassify indexed metadata using semantic filename rules.
             // Collect first, then update after closing the read cursor.
@@ -161,116 +152,10 @@ class FileIndexDatabase(context: Context) :
         }
     }
 
-
-    fun filesForCategory(category: String, query: String = ""): List<IndexedFile> {
-        val selection: String
-        val args: Array<String>
-        if (category == "empty") {
-            selection = "size_bytes = 0 AND (? = '' OR name LIKE ? OR mime_type LIKE ?)"
-            args = arrayOf(query, "%$query%", "%$query%")
-        } else {
-            selection = "category = ? AND (? = '' OR name LIKE ? OR mime_type LIKE ?)"
-            args = arrayOf(category, query, "%$query%", "%$query%")
-        }
-        return queryFiles("($selection) AND category != 'system'", args)
-    }
-
-    fun systemFiles(): List<IndexedFile> = queryFiles("category = 'system'", null)
-
-    fun countByCategory(): Map<String, Int> {
-        val result = mutableMapOf<String, Int>()
-        readableDatabase.rawQuery("SELECT category, COUNT(*) FROM indexed_files WHERE category != 'system' GROUP BY category", null).use { cursor ->
-            while (cursor.moveToNext()) result[cursor.getString(0)] = cursor.getInt(1)
-        }
-        readableDatabase.rawQuery("SELECT COUNT(*) FROM indexed_files WHERE size_bytes = 0 AND category != 'system'", null).use { cursor ->
-            if (cursor.moveToFirst()) result["empty"] = cursor.getInt(0)
-        }
-        return result
-    }
-
-    fun customCategories(): List<Triple<String, String, String?>> {
-        val result = mutableListOf<Triple<String, String, String?>>()
-        readableDatabase.query("custom_categories", arrayOf("id", "name", "parent_id"), null, null, null, null, "sort_order ASC, name COLLATE NOCASE ASC").use { cursor ->
-            while (cursor.moveToNext()) result += Triple(cursor.getString(0), cursor.getString(1), if (cursor.isNull(2)) null else cursor.getString(2))
-        }
-        return result
-    }
-
-    fun addCustomCategory(id: String, name: String, parentId: String? = null) {
-        val values = ContentValues().apply {
-            put("id", id); put("name", name)
-            if (parentId == null) putNull("parent_id") else put("parent_id", parentId)
-        }
-        writableDatabase.insertOrThrow("custom_categories", null, values)
-    }
-
-    fun renameCustomCategory(id: String, name: String) {
-        writableDatabase.update("custom_categories", ContentValues().apply { put("name", name) }, "id = ?", arrayOf(id))
-    }
-
-    fun moveCustomCategory(id: String, parentId: String?) {
-        if (parentId == id) return
-        var ancestor = parentId
-        val visited = mutableSetOf<String>()
-        while (ancestor != null && visited.add(ancestor)) {
-            if (ancestor == id) return // Prevent moving a category inside one of its descendants.
-            ancestor = readableDatabase.query(
-                "custom_categories", arrayOf("parent_id"), "id = ?", arrayOf(ancestor),
-                null, null, null
-            ).use { cursor ->
-                if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getString(0) else null
-            }
-        }
-        writableDatabase.update(
-            "custom_categories",
-            ContentValues().apply { if (parentId == null) putNull("parent_id") else put("parent_id", parentId) },
-            "id = ?",
-            arrayOf(id)
-        )
-    }
-
-    fun deleteCustomCategory(id: String) {
-        writableDatabase.beginTransaction()
-        try {
-            writableDatabase.delete("file_category_overrides", "category_id = ?", arrayOf(id))
-            writableDatabase.delete("custom_categories", "id = ?", arrayOf(id))
-            writableDatabase.setTransactionSuccessful()
-        } finally { writableDatabase.endTransaction() }
-    }
-
-    fun assignFileToCustomCategory(uri: String, categoryId: String) {
-        writableDatabase.insertWithOnConflict(
-            "file_category_overrides", null,
-            ContentValues().apply { put("uri", uri); put("category_id", categoryId) },
-            SQLiteDatabase.CONFLICT_REPLACE
-        )
-    }
-
-    fun filesInCustomCategory(categoryId: String): List<IndexedFile> =
-        queryFiles("category != 'system' AND uri IN (SELECT uri FROM file_category_overrides WHERE category_id = ?)", arrayOf(categoryId))
-
-    private fun queryFiles(selection: String?, args: Array<String>?): List<IndexedFile> {
-        val result = mutableListOf<IndexedFile>()
-        readableDatabase.query("indexed_files", null, selection, args, null, null, "name COLLATE NOCASE ASC").use { cursor ->
-            while (cursor.moveToNext()) {
-                result += IndexedFile(
-                    uri = cursor.getString(cursor.getColumnIndexOrThrow("uri")),
-                    name = cursor.getString(cursor.getColumnIndexOrThrow("name")),
-                    mimeType = cursor.getString(cursor.getColumnIndexOrThrow("mime_type")),
-                    sizeBytes = cursor.getLong(cursor.getColumnIndexOrThrow("size_bytes")),
-                    modifiedSeconds = cursor.getLong(cursor.getColumnIndexOrThrow("modified_seconds")),
-                    category = cursor.getString(cursor.getColumnIndexOrThrow("category")),
-                    source = cursor.getString(cursor.getColumnIndexOrThrow("source"))
-                )
-            }
-        }
-        return result
-    }
-
     fun allFiles(): List<IndexedFile> {
         val result = mutableListOf<IndexedFile>()
         readableDatabase.query(
-            "indexed_files", null, "category != ?", arrayOf("system"), null, null, "name COLLATE NOCASE ASC"
+            "indexed_files", null, null, null, null, null, "name COLLATE NOCASE ASC"
         ).use { cursor ->
             while (cursor.moveToNext()) {
                 result += IndexedFile(
@@ -354,8 +239,7 @@ object AndroidFileIndexer {
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.RELATIVE_PATH
+            MediaStore.MediaColumns.DATE_MODIFIED
         )
         val cursor = context.contentResolver.query(
             collection, projection, null, null,
@@ -367,19 +251,15 @@ object AndroidFileIndexer {
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
             val modifiedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-            val relativePathCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
-                val displayName = android.net.Uri.decode(cursor.getString(nameCol) ?: "بدون اسم")
-                val relativePath = if (cursor.isNull(relativePathCol)) "" else cursor.getString(relativePathCol).orEmpty()
-                val isSystemFile = SystemFileClassifier.isSystemPath(relativePath, displayName)
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
-                    name = displayName,
+                    name = android.net.Uri.decode(cursor.getString(nameCol) ?: "بدون اسم"),
                     mimeType = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol),
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
-                    category = if (isSystemFile) "system" else category,
+                    category = category,
                     source = source
                 )
             }
@@ -412,15 +292,13 @@ object AndroidFileIndexer {
         val rows = mutableListOf<IndexedFile>()
         var skippedEntries = 0
         val visitedDirectories = mutableSetOf<String>()
-        val pending = ArrayDeque<Pair<DocumentFile, String>>()
-        val selectedDocumentPath = runCatching { DocumentsContract.getTreeDocumentId(treeUri).substringAfter(':', "") }.getOrDefault("")
-        val initialPath = listOf(selectedDocumentPath, root.name.orEmpty()).filter { it.isNotBlank() }.joinToString("/")
-        pending.addLast(root to initialPath)
+        val pending = ArrayDeque<DocumentFile>()
+        pending.addLast(root)
 
         // Iterative traversal avoids stack overflow on deeply nested provider trees.
         // A faulty provider or revoked child permission must not stop other folders.
         while (pending.isNotEmpty()) {
-            val (directory, parentPath) = pending.removeLast()
+            val directory = pending.removeLast()
             if (!visitedDirectories.add(directory.uri.toString())) continue
 
             val children = try {
@@ -436,7 +314,7 @@ object AndroidFileIndexer {
             for (child in children) {
                 try {
                     when {
-                        child.isDirectory -> pending.addLast(child to listOf(parentPath, child.name.orEmpty()).filter { it.isNotBlank() }.joinToString("/"))
+                        child.isDirectory -> pending.addLast(child)
                         child.isFile -> {
                             val name = child.name?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
                             val mime = child.type
@@ -446,7 +324,7 @@ object AndroidFileIndexer {
                                 mimeType = mime,
                                 sizeBytes = queryDocumentSize(context, child.uri) ?: -1L,
                                 modifiedSeconds = (child.lastModified().coerceAtLeast(0L)) / 1000L,
-                                category = if (SystemFileClassifier.isSystemPath(parentPath, name)) "system" else FileClassifier.classify(name, mime),
+                                category = FileClassifier.classify(name, mime),
                                 source = "saf:$treeUri"
                             )
                         }

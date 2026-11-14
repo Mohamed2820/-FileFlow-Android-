@@ -66,24 +66,24 @@ private data class FileCategory(
 )
 
 private val categories = listOf(
-    FileCategory("study", "الدراسة", "المواد والمراجع والمحاضرات", "تنظيم هرمي: مادة دراسية ثم ملفات المادة، مع تجميع المراجع والمحاضرات والملخصات.", Icons.Rounded.School, Color(0xFFDC2626)),
-    FileCategory("images", "الصور", "الصور واللقطات", "تجميع الصور حسب النوع والتاريخ والمجلد، مع عرض المعاينات بعد منح الوصول.", Icons.Rounded.Image, Color(0xFF2563EB)),
-    FileCategory("videos", "الفيديوهات", "المقاطع والتسجيلات المرئية", "عرض ملفات الفيديو وبياناتها الأساسية ومددها وأحجامها عند توفر البيانات.", Icons.Rounded.PlayCircle, Color(0xFFF97316)),
-    FileCategory("audio", "الصوتيات", "الموسيقى والتسجيلات", "تنظيم الصوتيات باستخدام بيانات الوسائط المتاحة مثل الفنان والألبوم والمدة.", Icons.Rounded.MusicNote, Color(0xFF16A34A)),
-    FileCategory("documents", "المستندات", "PDF وWord وExcel والنصوص", "المستندات المصنفة حسب MIME type أو امتداد الملف.", Icons.Rounded.Description, Color(0xFFEAB308)),
-    FileCategory("archives", "الملفات المضغوطة", "ZIP وRAR و7Z وغيرها", "حزم وأرشيفات الملفات المعروفة من الامتداد أو نوع MIME.", Icons.Rounded.FolderZip, Color(0xFF64748B)),
-    FileCategory("code", "ملفات البرمجة", "المصدر والإعدادات والبيانات", "ملفات الشيفرة والتهيئة المعروفة من امتداداتها.", Icons.Rounded.Code, Color(0xFF0D9488)),
-    FileCategory("installers", "ملفات تثبيت التطبيقات", "APK وAAB والحزم", "ملفات تثبيت أو حزم تطبيقات Android.", Icons.Rounded.Android, Color(0xFF3B82F6)),
-    FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF16A34A)),
-    FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFF0EA5E9)),
-    FileCategory("empty", "الملفات الفارغة", "ملفات بحجم صفر", "إظهار الملفات التي يبلغ حجمها صفرًا، دون حذفها أو تعديلها تلقائيًا.", Icons.Rounded.InsertDriveFile, Color(0xFF9CA3AF)),
+    FileCategory("study", "الدراسة", "المواد والمراجع والمحاضرات", "تنظيم هرمي: مادة دراسية ثم ملفات المادة، مع تجميع المراجع والمحاضرات والملخصات.", Icons.Rounded.School, Color(0xFF8B7CF6)),
+    FileCategory("images", "الصور", "الصور واللقطات", "تجميع الصور حسب النوع والتاريخ والمجلد، مع عرض المعاينات بعد منح الوصول.", Icons.Rounded.Image, Color(0xFF58A6E7)),
+    FileCategory("videos", "الفيديوهات", "المقاطع والتسجيلات المرئية", "عرض ملفات الفيديو وبياناتها الأساسية ومددها وأحجامها عند توفر البيانات.", Icons.Rounded.PlayCircle, Color(0xFFE879A8)),
+    FileCategory("audio", "الصوتيات", "الموسيقى والتسجيلات", "تنظيم الصوتيات باستخدام بيانات الوسائط المتاحة مثل الفنان والألبوم والمدة.", Icons.Rounded.MusicNote, Color(0xFFE7A24E)),
+    FileCategory("documents", "المستندات", "PDF وWord وExcel والنصوص", "المستندات المصنفة حسب MIME type أو امتداد الملف.", Icons.Rounded.Description, Color(0xFF5C9DE8)),
+    FileCategory("archives", "الملفات المضغوطة", "ZIP وRAR و7Z وغيرها", "حزم وأرشيفات الملفات المعروفة من الامتداد أو نوع MIME.", Icons.Rounded.FolderZip, Color(0xFFB18AE8)),
+    FileCategory("code", "ملفات البرمجة", "المصدر والإعدادات والبيانات", "ملفات الشيفرة والتهيئة المعروفة من امتداداتها.", Icons.Rounded.Code, Color(0xFF51B68A)),
+    FileCategory("installers", "ملفات تثبيت التطبيقات", "APK وAAB والحزم", "ملفات تثبيت أو حزم تطبيقات Android.", Icons.Rounded.Android, Color(0xFF4EB8C5)),
+    FileCategory("projects", "مشاريع البرمجة", "المشاريع وملفات المصدر", "تنظيم هرمي: المشروع ثم مجلداته وملفاته، مع تصنيف ملفات المصدر حسب الامتداد.", Icons.Rounded.Code, Color(0xFF51B68A)),
+    FileCategory("apps", "التطبيقات", "التطبيقات المثبتة", "عرض التطبيقات المثبتة ومعلومات الحزم التي يسمح Android بالوصول إليها.", Icons.Rounded.Apps, Color(0xFF4EB8C5)),
+    FileCategory("empty", "الملفات الفارغة", "ملفات بحجم صفر", "إظهار الملفات التي يبلغ حجمها صفرًا، دون حذفها أو تعديلها تلقائيًا.", Icons.Rounded.InsertDriveFile, Color(0xFF9299A8)),
     FileCategory("other", "أخرى", "ملفات لم يتم تصنيفها بعد", "الملفات التي لا تتوفر أدلة كافية لتصنيفها ستبقى هنا بدل التخمين.", Icons.Rounded.Folder, Color(0xFF9299A8))
 )
 
 private val ink = Color(0xFF172033)
 private val muted = Color(0xFF788397)
 private val canvas = Color(0xFFF4F6FA)
-private val brand = Color(0xFFDC2626)
+private val brand = Color(0xFF8B5CF6)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -110,15 +110,15 @@ private fun FileFlowApp() {
     BackHandler(enabled = selected != "home") { goBack() }
 
     val scheme = if (dark) darkColorScheme(
-        primary = Color(0xFFEF4444), secondary = Color(0xFFFACC15), tertiary = Color(0xFF3B82F6),
-        background = Color(0xFF080808), surface = Color(0xFF171717),
-        onBackground = Color(0xFFF5F5F5), onSurface = Color(0xFFFFFFFF),
-        surfaceVariant = Color(0xFF292929), onSurfaceVariant = Color(0xFFD4D4D4)
+        primary = Color(0xFF9D70FF), secondary = Color(0xFF31D6F2), tertiary = Color(0xFFE879F9),
+        background = Color(0xFF090B1B), surface = Color(0xFF151832),
+        onBackground = Color(0xFFF4F1FF), onSurface = Color(0xFFF4F1FF),
+        surfaceVariant = Color(0xFF24264A), onSurfaceVariant = Color(0xFFC4C4E3)
     ) else lightColorScheme(
-        primary = Color(0xFFB91C1C), secondary = Color(0xFFCA8A04),
-        background = Color(0xFFF5F5F5), surface = Color.White,
-        onBackground = Color(0xFF171717), onSurface = Color(0xFF171717),
-        surfaceVariant = Color(0xFFE5E5E5), onSurfaceVariant = Color(0xFF525252)
+        primary = Color(0xFF7045D8), secondary = Color(0xFF168EA8),
+        background = Color(0xFFF5F2FF), surface = Color.White,
+        onBackground = ink, onSurface = ink,
+        surfaceVariant = Color(0xFFECE7FA), onSurfaceVariant = Color(0xFF596579)
     )
 
     MaterialTheme(colorScheme = scheme) {
@@ -213,28 +213,24 @@ private fun TopHeader(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val scope = rememberCoroutineScope()
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    var customCategories by remember { mutableStateOf<List<Triple<String, String, String?>>>(emptyList()) }
-    var showAddCategory by remember { mutableStateOf(false) }
-    var editingCategory by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
-    var categoryName by remember { mutableStateOf("") }
-    var categoryActionMenu by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
-    var parentCategoryId by remember { mutableStateOf<String?>(null) }
-    var parentMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        val loaded = withContext(Dispatchers.IO) {
+        counts = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
-            try { database.countByCategory() to database.customCategories() }
-            finally { database.close() }
+            try {
+                val all = database.allFiles()
+                categories.associate { category ->
+                    category.id to if (category.id == "empty") all.count { it.sizeBytes == 0L }
+                    else all.count { it.category == category.id }
+                }
+            } finally {
+                database.close()
+            }
         }
-        counts = loaded.first
-        customCategories = loaded.second
     }
 
     val tileCategories = categories.filter {
@@ -256,19 +252,19 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                     Modifier.fillMaxWidth()
                         .background(
                             Brush.linearGradient(
-                                listOf(Color(0xFF171717), Color(0xFF7F1D1D), Color(0xFF1D4ED8))
+                                listOf(Color(0xFF29145D), Color(0xFF171A42), Color(0xFF073B59))
                             )
                         )
                         .padding(horizontal = 18.dp, vertical = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("FILEFLOW", color = Color(0xFFFACC15), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("FILEFLOW", color = Color(0xFFC5A9FF), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(5.dp))
                         Text("كل ملفاتك.. بنظام أذكى", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("تصنيف بالاسم • فئات متداخلة • معاينات", color = Color(0xFFE5E5E5), fontSize = 10.sp)
+                        Text("تصنيف بالاسم • فئات متداخلة • معاينات", color = Color(0xFFD1D0F0), fontSize = 10.sp)
                     }
-                    Surface(shape = RoundedCornerShape(19.dp), color = Color(0xFFDC2626)) {
+                    Surface(shape = RoundedCornerShape(19.dp), color = Color(0xFF8050E8)) {
                         Icon(Icons.Rounded.FolderCopy, null, tint = Color.White, modifier = Modifier.padding(13.dp).size(38.dp))
                     }
                 }
@@ -305,31 +301,6 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
         }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("أقسامك المخصصة", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { categoryName = ""; parentCategoryId = null; showAddCategory = true }) {
-                    Icon(Icons.Rounded.Add, null); Text("إضافة قسم")
-                }
-            }
-        }
-        items(customCategories, key = { it.first }) { custom ->
-            Card(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).combinedClickable(
-                    onClick = { onCategory(custom.first) },
-                    onLongClick = { categoryActionMenu = custom }
-                ),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(15.dp)
-            ) {
-                Row(Modifier.fillMaxWidth().padding(start = if (custom.third != null) 30.dp else 14.dp, end = 14.dp, top = 14.dp, bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (custom.third != null) Icons.Rounded.SubdirectoryArrowRight else Icons.Rounded.Folder, null, tint = Color(0xFF16A34A))
-                    Spacer(Modifier.width(10.dp))
-                    Text(custom.second, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
-                }
-            }
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("الأقسام والملفات", fontSize = 17.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 TextButton(onClick = { onNavigate("all") }) { Text("عرض الكل") }
             }
@@ -354,115 +325,13 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
                 }
             }
         }
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { onNavigate("system") },
-                shape = RoundedCornerShape(17.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF641B2B))
-            ) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 17.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Security, null, tint = Color.White, modifier = Modifier.size(27.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("ملفات النظام", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                        Text("عناصر محمية أو مخفية مرصودة في التخزين المشترك — عرض فقط", color = Color(0xFFFFD9DF), fontSize = 10.sp)
-                    }
-                    Icon(Icons.Rounded.ChevronLeft, null, tint = Color.White)
-                }
-            }
-        }
-    }
-
-    if (showAddCategory || editingCategory != null) {
-        val editing = editingCategory
-        AlertDialog(
-            onDismissRequest = { showAddCategory = false; editingCategory = null },
-            title = { Text(if (editing == null) "إضافة قسم يدوي" else "تعديل اسم القسم") },
-            text = {
-                Column {
-                    OutlinedTextField(value = categoryName, onValueChange = { categoryName = it }, singleLine = true, label = { Text("اسم القسم") })
-                    Spacer(Modifier.height(8.dp))
-                    Box {
-                        OutlinedButton(onClick = { parentMenuExpanded = true }) {
-                            Text("المكان: " + (customCategories.firstOrNull { it.first == parentCategoryId }?.second ?: "قسم رئيسي"))
-                        }
-                        DropdownMenu(expanded = parentMenuExpanded, onDismissRequest = { parentMenuExpanded = false }) {
-                            DropdownMenuItem(text = { Text("قسم رئيسي") }, onClick = { parentCategoryId = null; parentMenuExpanded = false })
-                            customCategories.filter { it.first != editing?.first }.forEach { parent ->
-                                DropdownMenuItem(text = { Text(parent.second) }, onClick = { parentCategoryId = parent.first; parentMenuExpanded = false })
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val clean = categoryName.trim()
-                    if (clean.isNotBlank()) {
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                val db = FileIndexDatabase(context)
-                                try {
-                                    if (editing == null) db.addCustomCategory("custom:" + java.util.UUID.randomUUID().toString(), clean, parentCategoryId)
-                                    else {
-                                        db.renameCustomCategory(editing.first, clean)
-                                        db.moveCustomCategory(editing.first, parentCategoryId)
-                                    }
-                                } finally { db.close() }
-                            }
-                            customCategories = withContext(Dispatchers.IO) {
-                                val db = FileIndexDatabase(context)
-                                try { db.customCategories() } finally { db.close() }
-                            }
-                            showAddCategory = false
-                            editingCategory = null
-                        }
-                    }
-                }) { Text("حفظ") }
-            },
-            dismissButton = { TextButton(onClick = { showAddCategory = false; editingCategory = null }) { Text("إلغاء") } }
-        )
-    }
-
-    categoryActionMenu?.let { category ->
-        AlertDialog(
-            onDismissRequest = { categoryActionMenu = null },
-            title = { Text(category.second) },
-            text = { Text("حذف القسم المخصص لا يحذف الملفات الأصلية من الهاتف.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    categoryName = category.second
-                    parentCategoryId = category.third
-                    editingCategory = category
-                    categoryActionMenu = null
-                }) { Text("إعادة تسمية") }
-            },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = {
-                        scope.launch {
-                            withContext(Dispatchers.IO) {
-                                val db = FileIndexDatabase(context)
-                                try { db.deleteCustomCategory(category.first) } finally { db.close() }
-                            }
-                            customCategories = withContext(Dispatchers.IO) {
-                                val db = FileIndexDatabase(context)
-                                try { db.customCategories() } finally { db.close() }
-                            }
-                        }
-                        categoryActionMenu = null
-                    }) { Text("حذف القسم", color = MaterialTheme.colorScheme.error) }
-                    TextButton(onClick = { categoryActionMenu = null }) { Text("إغلاق") }
-                }
-            }
-        )
     }
 }
 
 @Composable
 private fun CategoryCard(category: FileCategory, modifier: Modifier = Modifier, count: Int? = null, onClick: () -> Unit) {
     Card(
-        modifier = modifier.heightIn(min = 76.dp).clickable(onClick = onClick),
+        modifier = modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
@@ -536,9 +405,9 @@ private fun ArchiveScreen(
                 }
             }) { Icon(Icons.Rounded.ArrowBack, contentDescription = "رجوع") }
             Text("الأرشيف", color = brand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            if (category != null || selected == "all" || selected == "system") {
+            if (category != null || selected == "all") {
                 Text("  /  ", color = muted)
-                Text(if (selected == "system") "ملفات النظام" else category?.title ?: title, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
+                Text(category?.title ?: title, color = MaterialTheme.colorScheme.onBackground, fontSize = 13.sp)
             }
             selectedSubject?.let {
                 Text("  /  ", color = muted)
@@ -601,7 +470,6 @@ private fun ArchiveScreen(
                     }
                 }
             }
-            selected == "system" -> SystemFilesScreen()
             selected == "recent" || selected == "favorites" || selected == "duplicates" -> {
                 val icon = when (selected) {
                     "recent" -> Icons.Rounded.History
@@ -610,7 +478,6 @@ private fun ArchiveScreen(
                 }
                 EmptyState(icon, "القسم غير مربوط بعد", "يلزم تنفيذ سجل الاستخدام والمفضلة وفحص بصمات التكرار قبل عرض نتائج حقيقية.")
             }
-            selected.startsWith("custom:") -> CustomCategoryScreen(selected, query, onCategory)
             selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
                 IndexedFilesContent(
                     selected = selected,
@@ -625,113 +492,6 @@ private fun ArchiveScreen(
             }
             else -> EmptyState(category?.icon ?: Icons.Rounded.FolderOpen, "هذا القسم لم يُربط بعد", "اختر مجلدًا من الرئيسية لفهرسة محتوياته.")
         }
-    }
-}
-
-@Composable
-private fun SystemFilesScreen() {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var files by remember { mutableStateOf<List<IndexedFile>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        loading = true
-        val result = runCatching {
-            withContext(Dispatchers.IO) {
-                val db = FileIndexDatabase(context)
-                try { db.systemFiles() } finally { db.close() }
-            }
-        }
-        files = result.getOrNull().orEmpty()
-        error = result.exceptionOrNull()?.localizedMessage
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        Card(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF641B2B)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Security, null, tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text("ملفات النظام — وضع آمن", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-                Text(
-                    "هذه قائمة بالعناصر المخفية أو المحجوزة التي استطاع Android إظهارها في مساحة التخزين المشتركة. لا توجد هنا أوامر حذف أو نقل أو إعادة تسمية.",
-                    color = Color(0xFFFFD9DF), fontSize = 11.sp
-                )
-                Text(
-                    "لا يستطيع التطبيق العادي قراءة جميع أقسام Android الخاصة مثل /system وبيانات التطبيقات الخاصة وAndroid/data على بعض الإصدارات.",
-                    color = Color(0xFFFFD9DF), fontSize = 10.sp
-                )
-            }
-        }
-        when {
-            loading -> LinearProgressIndicator(Modifier.fillMaxWidth())
-            error != null -> EmptyState(Icons.Rounded.Warning, "تعذر قراءة القائمة", error ?: "خطأ غير معروف")
-            files.isEmpty() -> EmptyState(Icons.Rounded.Security, "لا توجد ملفات نظام مرصودة", "أعد فهرسة التخزين المشترك بعد منح الصلاحية المناسبة.")
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                items(files, key = { it.uri }) { file ->
-                    ListItem(
-                        headlineContent = { Text(file.name, maxLines = 2) },
-                        supportingContent = { Text("${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}", color = muted, fontSize = 10.sp) },
-                        leadingContent = { Icon(Icons.Rounded.Lock, null, tint = Color(0xFF9F334B)) }
-                    )
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CustomCategoryScreen(categoryId: String, query: String, onCategory: (String) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var children by remember(categoryId) { mutableStateOf<List<Triple<String, String, String?>>>(emptyList()) }
-    LaunchedEffect(categoryId) {
-        children = withContext(Dispatchers.IO) {
-            val db = FileIndexDatabase(context)
-            try { db.customCategories().filter { it.third == categoryId } } finally { db.close() }
-        }
-    }
-    Column(Modifier.fillMaxSize()) {
-        if (children.isNotEmpty()) {
-            Text("الفئات الفرعية", fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp))
-            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 190.dp), contentPadding = PaddingValues(horizontal = 10.dp, vertical = 3.dp)) {
-                items(children, key = { it.first }) { child ->
-                    Card(
-                        Modifier.fillMaxWidth().padding(vertical = 3.dp).clickable { onCategory(child.first) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.Folder, null, tint = Color(0xFF16A34A))
-                            Spacer(Modifier.width(9.dp))
-                            Text(child.second, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                            Icon(Icons.Rounded.ChevronLeft, null, tint = muted)
-                        }
-                    }
-                }
-            }
-        }
-        IndexedFilesContent(
-            selected = categoryId,
-            query = query,
-            gridView = true,
-            onGridToggle = {},
-            selectedSubject = null,
-            onSubjectChange = {},
-            selectedExtension = null,
-            onExtensionChange = {},
-            modifier = Modifier.weight(1f)
-        )
     }
 }
 
@@ -907,8 +667,7 @@ private fun IndexedFilesContent(
     selectedSubject: String?,
     onSubjectChange: (String?) -> Unit,
     selectedExtension: String?,
-    onExtensionChange: (String?) -> Unit,
-    modifier: Modifier = Modifier
+    onExtensionChange: (String?) -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -921,8 +680,6 @@ private fun IndexedFilesContent(
     val selectedUris = remember(selected) { mutableStateListOf<String>() }
     var refreshKey by remember(selected) { mutableIntStateOf(0) }
     var actionStatus by remember { mutableStateOf<String?>(null) }
-    var customCategories by remember { mutableStateOf<List<Triple<String, String, String?>>>(emptyList()) }
-    var customCategoryMenuExpanded by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<IndexedFile?>(null) }
     var renameValue by remember { mutableStateOf("") }
     var showRenameDialog by remember { mutableStateOf(false) }
@@ -947,15 +704,16 @@ private fun IndexedFilesContent(
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
-                if (selected.startsWith("custom:")) database.filesInCustomCategory(selected).filter { query.isBlank() || it.name.contains(query.trim(), true) }
-                else database.filesForCategory(selected, query.trim())
+                val all = database.allFiles()
+                val categoryFiles = if (selected == "empty") all.filter { it.sizeBytes == 0L }
+                else all.filter { it.category == selected }
+                categoryFiles.filter { file ->
+                    query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
+                        (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
+                }
             } finally {
                 database.close()
             }
-        }
-        customCategories = withContext(Dispatchers.IO) {
-            val database = FileIndexDatabase(context)
-            try { database.customCategories() } finally { database.close() }
         }
     }
 
@@ -1072,7 +830,7 @@ private fun IndexedFilesContent(
         return
     }
 
-    Column(modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
         if (selecting) {
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 7.dp, vertical = 1.dp),
@@ -1096,35 +854,6 @@ private fun IndexedFilesContent(
                     }) {
                         Icon(Icons.Rounded.Edit, null, modifier = Modifier.size(16.dp))
                         Text("تسمية", fontSize = 10.sp)
-                    }
-                }
-                Box {
-                    TextButton(onClick = { customCategoryMenuExpanded = true }) {
-                        Icon(Icons.Rounded.Folder, null, modifier = Modifier.size(16.dp))
-                        Text("تصنيف", fontSize = 10.sp)
-                    }
-                    DropdownMenu(expanded = customCategoryMenuExpanded, onDismissRequest = { customCategoryMenuExpanded = false }) {
-                        if (customCategories.isEmpty()) {
-                            DropdownMenuItem(text = { Text("أنشئ قسمًا من الرئيسية أولًا") }, onClick = { customCategoryMenuExpanded = false })
-                        } else customCategories.forEach { custom ->
-                            DropdownMenuItem(
-                                text = { Text(custom.second) },
-                                onClick = {
-                                    scope.launch {
-                                        withContext(Dispatchers.IO) {
-                                            val db = FileIndexDatabase(context)
-                                            try { selectedFiles.forEach { db.assignFileToCustomCategory(it.uri, custom.first) } }
-                                            finally { db.close() }
-                                        }
-                                        actionStatus = "تم إسناد ${selectedFiles.size} ملفًا إلى ${custom.second}."
-                                        selectedUris.clear()
-                                        selecting = false
-                                        refreshKey++
-                                    }
-                                    customCategoryMenuExpanded = false
-                                }
-                            )
-                        }
                     }
                 }
                 TextButton(onClick = {
@@ -1219,7 +948,7 @@ private fun IndexedFilesContent(
                             val count = if (showingSubjectTiles) files.count { studySubjectLabel(it) == group }
                             else extensionSource.count { extensionLabel(it) == group }
                             Card(
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp).clickable {
+                                modifier = Modifier.fillMaxWidth().clickable {
                                     if (showingSubjectTiles) onSubjectChange(group) else onExtensionChange(group)
                                 },
                                 shape = RoundedCornerShape(15.dp),
@@ -1229,7 +958,7 @@ private fun IndexedFilesContent(
                                     Icon(
                                         if (showingSubjectTiles) Icons.Rounded.School else Icons.Rounded.InsertDriveFile,
                                         contentDescription = null,
-                                        tint = if (showingSubjectTiles) Color(0xFFDC2626) else Color(0xFF2563EB),
+                                        tint = if (showingSubjectTiles) Color(0xFFB28AFF) else Color(0xFF53C6F0),
                                         modifier = Modifier.size(24.dp)
                                     )
                                     Spacer(Modifier.height(7.dp))
@@ -1260,7 +989,7 @@ private fun IndexedFilesContent(
                         ) {
                             Box {
                                 MediaThumbnail(file, selected, Modifier.fillMaxWidth().aspectRatio(1f))
-                                if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFFDC2626), modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
+                                if (isChosen) Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFF8B5CF6), modifier = Modifier.align(Alignment.TopEnd).padding(4.dp))
                             }
                             Text(file.name, maxLines = 1, fontSize = 10.sp, color = MaterialTheme.colorScheme.onBackground)
                             Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 9.sp, color = muted)
@@ -1554,9 +1283,9 @@ private fun FileDetailPanel(
                 MediaThumbnail(file, file.category, Modifier.fillMaxWidth().height(175.dp))
             } else {
                 Box(
-                    Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(listOf(Color(0xFF262626), Color(0xFF1D4ED8)))),
+                    Modifier.fillMaxWidth().height(90.dp).background(Brush.linearGradient(listOf(Color(0xFF26164F), Color(0xFF102A46)))),
                     contentAlignment = Alignment.Center
-                ) { Icon(fileCategoryIcon(file.category), null, tint = Color(0xFFFACC15), modifier = Modifier.size(50.dp)) }
+                ) { Icon(fileCategoryIcon(file.category), null, tint = Color(0xFFB99AFF), modifier = Modifier.size(50.dp)) }
             }
             Column(Modifier.fillMaxWidth().padding(11.dp)) {
                 Text(file.name, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 2)
