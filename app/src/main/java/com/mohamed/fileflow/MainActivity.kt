@@ -509,80 +509,25 @@ private fun MediaThumbnail(file: IndexedFile, selected: String, modifier: Modifi
     )
 }
 
-private fun secondaryFileGroup(file: IndexedFile): String {
-    val ext = file.name.substringAfterLast('.', "").lowercase()
-    return when (file.category) {
-        "images" -> when (ext) {
-            "jpg", "jpeg" -> "JPEG"
-            "png" -> "PNG"
-            "gif" -> "GIF"
-            "webp" -> "WebP"
-            "heic", "heif" -> "HEIF"
-            "svg" -> "SVG"
-            else -> "صور أخرى"
-        }
-        "videos" -> when (ext) {
-            "mp4", "m4v" -> "MP4"
-            "mkv" -> "MKV"
-            "mov" -> "MOV"
-            "webm" -> "WebM"
-            "avi" -> "AVI"
-            "3gp" -> "3GP"
-            else -> "فيديوهات أخرى"
-        }
-        "audio" -> when (ext) {
-            "mp3" -> "MP3"
-            "m4a", "aac" -> "AAC / M4A"
-            "wav" -> "WAV"
-            "flac" -> "FLAC"
-            "ogg", "opus" -> "OGG / OPUS"
-            else -> "صوتيات أخرى"
-        }
-        "documents" -> when (ext) {
-            "pdf" -> "PDF"
-            "doc", "docx" -> "Word"
-            "xls", "xlsx", "csv" -> "Excel / CSV"
-            "ppt", "pptx" -> "PowerPoint"
-            "txt", "rtf", "md" -> "نصوص"
-            "epub" -> "كتب إلكترونية"
-            else -> "مستندات أخرى"
-        }
-        "archives" -> when (ext) {
-            "zip" -> "ZIP"
-            "rar" -> "RAR"
-            "7z" -> "7Z"
-            "tar", "gz", "bz2", "xz" -> "TAR / GZIP"
-            else -> "أرشيفات أخرى"
-        }
-        "code" -> when (ext) {
-            "py" -> "Python"
-            "kt", "kts" -> "Kotlin"
-            "java" -> "Java"
-            "js", "ts", "jsx", "tsx" -> "JavaScript / TypeScript"
-            "html", "css" -> "Web"
-            "c", "h", "cpp", "hpp" -> "C / C++"
-            "json", "xml", "yaml", "yml", "toml", "properties" -> "ملفات إعدادات"
-            "sql" -> "SQL"
-            "sh" -> "Shell"
-            else -> "لغات أخرى"
-        }
-        "installers" -> when (ext) {
-            "apk" -> "APK"
-            "aab" -> "AAB"
-            "apks", "xapk" -> "حزم متعددة"
-            else -> "حزم أخرى"
-        }
-        "empty" -> "ملفات فارغة"
-        else -> file.mimeType?.substringBefore('/')?.takeIf { it.isNotBlank() }?.uppercase() ?: "غير معروف"
+private fun extensionLabel(file: IndexedFile): String {
+    val extension = file.name.substringAfterLast('.', "").trim().lowercase()
+    return if (extension.isBlank() || extension == file.name.lowercase()) {
+        "بدون امتداد"
+    } else {
+        extension.removePrefix(".").uppercase(Locale.ROOT)
     }
 }
+
+private fun studySubjectLabel(file: IndexedFile): String =
+    FileClassifier.studySubject(file.name) ?: "مواد دراسية أخرى"
 
 @Composable
 private fun IndexedFilesContent(selected: String, query: String, gridView: Boolean) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var files by remember(selected, query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
-    var selectedGroup by remember(selected) { mutableStateOf("الكل") }
-    var sortMode by remember(selected) { mutableStateOf("date_desc") }
+    var selectedSubject by remember(selected) { mutableStateOf<String?>(null) }
+    var selectedExtension by remember(selected) { mutableStateOf<String?>(null) }
+    var sortMode by remember(selected) { mutableStateOf("name_asc") }
     var sortMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(selected, query) {
@@ -604,20 +549,31 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
         }
     }
 
-    val availableGroups = remember(files, selected) {
-        files.map { secondaryFileGroup(it) }.distinct().sorted()
+    val subjects = remember(files, selected) {
+        if (selected == "study") files.map(::studySubjectLabel).distinct().sorted()
+        else emptyList()
     }
-    val visibleFiles = remember(files, selectedGroup, sortMode) {
-        val filtered = if (selectedGroup == "الكل") files else files.filter {
-            secondaryFileGroup(it) == selectedGroup
-        }
+    val subjectFiles = remember(files, selectedSubject) {
+        if (selected == "study" && selectedSubject != null) {
+            files.filter { studySubjectLabel(it) == selectedSubject }
+        } else files
+    }
+    val extensions = remember(files, selected, selectedSubject) {
+        val source = if (selected == "study") subjectFiles else files
+        source.map(::extensionLabel).distinct().sorted()
+    }
+    val extensionFiles = remember(subjectFiles, files, selected, selectedExtension) {
+        val source = if (selected == "study") subjectFiles else files
+        if (selectedExtension == null) source else source.filter { extensionLabel(it) == selectedExtension }
+    }
+    val visibleFiles = remember(extensionFiles, sortMode) {
         when (sortMode) {
-            "name_desc" -> filtered.sortedByDescending { it.name.lowercase() }
-            "size_desc" -> filtered.sortedByDescending { it.sizeBytes }
-            "size_asc" -> filtered.sortedBy { it.sizeBytes }
-            "date_asc" -> filtered.sortedBy { it.modifiedSeconds }
-            "date_desc" -> filtered.sortedByDescending { it.modifiedSeconds }
-            else -> filtered.sortedBy { it.name.lowercase() }
+            "name_desc" -> extensionFiles.sortedByDescending { it.name.lowercase(Locale.ROOT) }
+            "size_desc" -> extensionFiles.sortedByDescending { it.sizeBytes }
+            "size_asc" -> extensionFiles.sortedBy { it.sizeBytes }
+            "date_asc" -> extensionFiles.sortedBy { it.modifiedSeconds }
+            "date_desc" -> extensionFiles.sortedByDescending { it.modifiedSeconds }
+            else -> extensionFiles.sortedBy { it.name.lowercase(Locale.ROOT) }
         }
     }
     val sortLabels = listOf(
@@ -646,12 +602,20 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
         }
     }
 
+    val showingSubjectTiles = selected == "study" && selectedSubject == null
+    val showingExtensionTiles = selectedExtension == null &&
+        (selected != "study" || selectedSubject != null)
+
     Column(Modifier.fillMaxSize()) {
         if (files.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${visibleFiles.size} ملف",
+                        when {
+                            selected == "study" && selectedSubject == null -> "${subjects.size} مادة دراسية"
+                            showingExtensionTiles -> "${extensions.size} امتدادات"
+                            else -> "${visibleFiles.size} ملف"
+                        },
                         color = muted,
                         fontSize = 12.sp,
                         modifier = Modifier.weight(1f)
@@ -662,44 +626,33 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                             Spacer(Modifier.width(4.dp))
                             Text(sortLabels.firstOrNull { it.first == sortMode }?.second ?: "ترتيب")
                         }
-                        DropdownMenu(
-                            expanded = sortMenuExpanded,
-                            onDismissRequest = { sortMenuExpanded = false }
-                        ) {
+                        DropdownMenu(expanded = sortMenuExpanded, onDismissRequest = { sortMenuExpanded = false }) {
                             sortLabels.forEach { (key, label) ->
                                 DropdownMenuItem(
                                     text = { Text(label) },
-                                    onClick = {
-                                        sortMode = key
-                                        sortMenuExpanded = false
-                                    },
-                                    leadingIcon = {
-                                        if (sortMode == key) Icon(Icons.Rounded.Check, null)
-                                    }
+                                    onClick = { sortMode = key; sortMenuExpanded = false },
+                                    leadingIcon = { if (sortMode == key) Icon(Icons.Rounded.Check, null) }
                                 )
                             }
                         }
                     }
                 }
-                if (availableGroups.isNotEmpty()) {
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(7.dp),
-                        contentPadding = PaddingValues(bottom = 8.dp)
-                    ) {
-                        item {
-                            FilterChip(
-                                selected = selectedGroup == "الكل",
-                                onClick = { selectedGroup = "الكل" },
-                                label = { Text("الكل") }
-                            )
+                if (selected == "study" && selectedSubject != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { selectedSubject = null; selectedExtension = null }) {
+                            Icon(Icons.Rounded.ArrowBack, null)
+                            Text("كل المواد")
                         }
-                        items(availableGroups) { group ->
-                            FilterChip(
-                                selected = selectedGroup == group,
-                                onClick = { selectedGroup = group },
-                                label = { Text(group) }
-                            )
+                        Text(" / $selectedSubject", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (selectedExtension != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { selectedExtension = null }) {
+                            Icon(Icons.Rounded.ArrowBack, null)
+                            Text("كل الامتدادات")
                         }
+                        Text(" / $selectedExtension", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -709,14 +662,57 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
             files.isEmpty() -> EmptyState(
                 Icons.Rounded.FolderOpen,
                 "لا توجد ملفات مفهرسة في هذا القسم",
-                "ارجع للرئيسية وحدّث فهرسة الملفات، ثم افتح القسم مرة أخرى."
+                "أعد فهرسة الملفات بعد منح صلاحية الوصول، ثم افتح القسم مرة أخرى."
             )
-            visibleFiles.isEmpty() -> EmptyState(
-                Icons.Rounded.FilterListOff,
-                "لا توجد ملفات في هذا التصنيف الفرعي",
-                "اختر تصنيفًا فرعيًا آخر أو اعرض كل الملفات."
-            )
-            (selected == "images" || selected == "videos") && gridView -> {
+            showingSubjectTiles || showingExtensionTiles -> {
+                val groups = if (showingSubjectTiles) subjects else extensions
+                if (groups.isEmpty()) {
+                    EmptyState(Icons.Rounded.FolderOpen, "لا توجد تصنيفات فرعية", "لم يعثر الفهرس على ملفات يمكن عرضها هنا.")
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        gridItems(groups, key = { it }) { group ->
+                            val count = if (showingSubjectTiles) {
+                                files.count { studySubjectLabel(it) == group }
+                            } else {
+                                subjectFiles.count { extensionLabel(it) == group }
+                            }
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    if (showingSubjectTiles) selectedSubject = group
+                                    else selectedExtension = group
+                                },
+                                shape = RoundedCornerShape(18.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                                    Icon(
+                                        if (showingSubjectTiles) Icons.Rounded.School else Icons.Rounded.InsertDriveFile,
+                                        contentDescription = null,
+                                        tint = if (showingSubjectTiles) Color(0xFFB28AFF) else Color(0xFF53C6F0),
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(group, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2)
+                                    Text("$count ملف", color = muted, fontSize = 11.sp)
+                                    Spacer(Modifier.height(6.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("فتح", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp)
+                                        Spacer(Modifier.weight(1f))
+                                        Icon(Icons.Rounded.ChevronLeft, null, tint = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            gridView && (selected == "images" || selected == "videos") -> {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
                     modifier = Modifier.fillMaxSize(),
@@ -757,7 +753,7 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                                 Text(file.name, maxLines = 2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    "${secondaryFileGroup(file)} • ${formatBytes(file.sizeBytes)}",
+                                    "${extensionLabel(file)} • ${formatBytes(file.sizeBytes)}",
                                     maxLines = 2,
                                     fontSize = 10.sp,
                                     color = muted
@@ -774,10 +770,10 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 ) {
                     items(visibleFiles, key = { it.uri }) { file ->
                         ListItem(
-                            headlineContent = { Text(file.name, maxLines = 1) },
+                            headlineContent = { Text(file.name, maxLines = 2) },
                             supportingContent = {
                                 Text(
-                                    "${secondaryFileGroup(file)} • ${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
+                                    "${extensionLabel(file)} • ${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
                                     color = muted,
                                     fontSize = 11.sp
                                 )
