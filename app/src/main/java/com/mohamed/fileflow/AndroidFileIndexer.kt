@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.database.sqlite.SQLiteException
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -67,9 +68,12 @@ class FileIndexDatabase(context: Context) :
                     put("category", file.category)
                     put("source", file.source)
                 }
-                writableDatabase.insertWithOnConflict(
+                val insertedRowId = writableDatabase.insertWithOnConflict(
                     "indexed_files", null, values, SQLiteDatabase.CONFLICT_REPLACE
                 )
+                if (insertedRowId == -1L) {
+                    throw SQLiteException("Failed to store indexed file metadata")
+                }
             }
             writableDatabase.setTransactionSuccessful()
         } finally {
