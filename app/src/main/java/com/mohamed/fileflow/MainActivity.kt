@@ -226,16 +226,13 @@ private fun HomeScreen(onNavigate: (String) -> Unit, onCategory: (String) -> Uni
     var categoryActionMenu by remember { mutableStateOf<Triple<String, String, String?>?>(null) }
 
     LaunchedEffect(Unit) {
-        counts = withContext(Dispatchers.IO) {
+        val loaded = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
-            try {
-                counts = database.countByCategory()
-                customCategories = database.customCategories()
-                emptyMap()
-            } finally {
-                database.close()
-            }
+            try { database.countByCategory() to database.customCategories() }
+            finally { database.close() }
         }
+        counts = loaded.first
+        customCategories = loaded.second
     }
 
     val tileCategories = categories.filter {
@@ -575,7 +572,7 @@ private fun ArchiveScreen(
                 }
                 EmptyState(icon, "القسم غير مربوط بعد", "يلزم تنفيذ سجل الاستخدام والمفضلة وفحص بصمات التكرار قبل عرض نتائج حقيقية.")
             }
-            selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") -> {
+            selected in listOf("study", "projects", "images", "videos", "audio", "documents", "archives", "code", "installers", "other", "empty") || selected.startsWith("custom:") -> {
                 IndexedFilesContent(
                     selected = selected,
                     query = query,
@@ -801,7 +798,7 @@ private fun IndexedFilesContent(
         files = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
-                if (selected.startsWith("custom:")) database.filesInCustomCategory(selected)
+                if (selected.startsWith("custom:")) database.filesInCustomCategory(selected).filter { query.isBlank() || it.name.contains(query.trim(), true) }
                 else database.filesForCategory(selected, query.trim())
             } finally {
                 database.close()
