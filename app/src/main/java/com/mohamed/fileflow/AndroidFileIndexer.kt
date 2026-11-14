@@ -7,11 +7,13 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import android.database.sqlite.SQLiteException
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
+import java.util.ArrayDeque
 
 /**
  * Device-local file index. It stores metadata and content URIs only; it never
@@ -27,8 +29,13 @@ data class IndexedFile(
     val source: String
 )
 
+data class TreeScanResult(
+    val files: List<IndexedFile>,
+    val skippedEntries: Int
+)
+
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 1) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 3) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -49,7 +56,35 @@ class FileIndexDatabase(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Versioned migrations will be added here before changing the schema.
+        if (oldVersion < 3) {
+            // Reclassify indexed metadata using semantic filename rules.
+            // Collect first, then update after closing the read cursor.
+            val rows = mutableListOf<Triple<String, String, String?>>()
+            db.query(
+                "indexed_files",
+                arrayOf("uri", "name", "mime_type"),
+                null, null, null, null, null
+            ).use { cursor ->
+                val uriIndex = cursor.getColumnIndexOrThrow("uri")
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val mimeIndex = cursor.getColumnIndexOrThrow("mime_type")
+                while (cursor.moveToNext()) {
+                    rows += Triple(
+                        cursor.getString(uriIndex),
+                        cursor.getString(nameIndex),
+                        if (cursor.isNull(mimeIndex)) null else cursor.getString(mimeIndex)
+                    )
+                }
+            }
+            rows.forEach { (uri, name, mime) ->
+                val decodedName = android.net.Uri.decode(name)
+                val values = ContentValues().apply {
+                    put("name", decodedName)
+                    put("category", FileClassifier.classify(decodedName, mime))
+                }
+                db.update("indexed_files", values, "uri = ?", arrayOf(uri))
+            }
+        }
     }
 
     fun replaceSource(source: String, files: List<IndexedFile>) {
@@ -66,9 +101,12 @@ class FileIndexDatabase(context: Context) :
                     put("category", file.category)
                     put("source", file.source)
                 }
-                writableDatabase.insertWithOnConflict(
+                val insertedRowId = writableDatabase.insertWithOnConflict(
                     "indexed_files", null, values, SQLiteDatabase.CONFLICT_REPLACE
                 )
+                if (insertedRowId == -1L) {
+                    throw SQLiteException("Failed to store indexed file metadata")
+                }
             }
             writableDatabase.setTransactionSuccessful()
         } finally {
@@ -165,10 +203,11 @@ object AndroidFileIndexer {
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.DATE_MODIFIED
         )
-        context.contentResolver.query(
+        val cursor = context.contentResolver.query(
             collection, projection, null, null,
             "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-        )?.use { cursor ->
+        ) ?: throw IllegalStateException("تعذر قراءة قائمة ملفات الوسائط من Android")
+        cursor.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
@@ -178,7 +217,7 @@ object AndroidFileIndexer {
                 val id = cursor.getLong(idCol)
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
-                    name = cursor.getString(nameCol) ?: "بدون اسم",
+                    name = android.net.Uri.decode(cursor.getString(nameCol) ?: "بدون اسم"),
                     mimeType = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol),
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
@@ -209,57 +248,56 @@ object AndroidFileIndexer {
         }
     }
 
-    fun scanPickedTree(context: Context, treeUri: Uri): List<IndexedFile> {
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return emptyList()
+    fun scanPickedTree(context: Context, treeUri: Uri): TreeScanResult {
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+            ?: return TreeScanResult(emptyList(), skippedEntries = 1)
         val rows = mutableListOf<IndexedFile>()
+        var skippedEntries = 0
         val visitedDirectories = mutableSetOf<String>()
+        val pending = ArrayDeque<DocumentFile>()
+        pending.addLast(root)
 
-        // Document providers are external and may fail on individual folders.
-        // Continue indexing the rest of the selected tree instead of aborting.
-        fun visit(directory: DocumentFile) {
-            val directoryKey = directory.uri.toString()
-            if (!visitedDirectories.add(directoryKey)) return
+        // Iterative traversal avoids stack overflow on deeply nested provider trees.
+        // A faulty provider or revoked child permission must not stop other folders.
+        while (pending.isNotEmpty()) {
+            val directory = pending.removeLast()
+            if (!visitedDirectories.add(directory.uri.toString())) continue
 
             val children = try {
                 directory.listFiles()
             } catch (_: SecurityException) {
-                return
+                skippedEntries++
+                continue
             } catch (_: Exception) {
-                return
+                skippedEntries++
+                continue
             }
 
-            children.forEach { child ->
+            for (child in children) {
                 try {
                     when {
-                        child.isDirectory -> visit(child)
+                        child.isDirectory -> pending.addLast(child)
                         child.isFile -> {
+                            val name = child.name?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
                             val mime = child.type
-                            val category = when {
-                                mime?.startsWith("image/") == true -> "images"
-                                mime?.startsWith("video/") == true -> "videos"
-                                mime?.startsWith("audio/") == true -> "audio"
-                                else -> "other"
-                            }
                             rows += IndexedFile(
                                 uri = child.uri.toString(),
-                                name = child.name ?: "بدون اسم",
+                                name = name,
                                 mimeType = mime,
                                 sizeBytes = queryDocumentSize(context, child.uri) ?: -1L,
-                                modifiedSeconds = child.lastModified() / 1000L,
-                                category = category,
-                                source = "saf:${treeUri}"
+                                modifiedSeconds = (child.lastModified().coerceAtLeast(0L)) / 1000L,
+                                category = FileClassifier.classify(name, mime),
+                                source = "saf:$treeUri"
                             )
                         }
                     }
                 } catch (_: SecurityException) {
-                    // A revoked or restricted child must not stop the whole scan.
+                    skippedEntries++
                 } catch (_: Exception) {
-                    // Providers can invalidate a document while enumeration is running.
+                    skippedEntries++
                 }
             }
         }
-
-        visit(root)
-        return rows
+        return TreeScanResult(rows, skippedEntries)
     }
 }
