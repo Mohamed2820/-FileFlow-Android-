@@ -73,7 +73,7 @@ fun StorageAccessPanel() {
                     total
                 }
                 indexedCount = count
-                status = "اكتمل فحص الوسائط المسموح بها. عدد العناصر المفهرسة: ${files.size}"
+                status = "اكتمل فحص الوسائط المتاحة وفق الصلاحيات الحالية. عدد العناصر المقروءة: ${files.size}"
             } catch (error: Exception) {
                 status = "تعذر إكمال الفهرسة: ${error.localizedMessage ?: "خطأ غير معروف"}"
             } finally {
@@ -85,7 +85,10 @@ fun StorageAccessPanel() {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        val granted = results.values.any { it }
+        val granted = results.values.any { it } ||
+            AndroidFileIndexer.hasImageAccess(context) ||
+            AndroidFileIndexer.hasVideoAccess(context) ||
+            AndroidFileIndexer.hasAudioAccess(context)
         if (granted) saveMediaIndex()
         else status = "لم تُمنح صلاحيات الوسائط. يمكنك اختيار مجلد يدويًا بدلًا من ذلك."
     }
@@ -115,7 +118,7 @@ fun StorageAccessPanel() {
                             total
                         }
                         indexedCount = count
-                        status = "اكتملت فهرسة المجلد. عدد ملفاته: ${files.size}"
+                        status = "اكتملت فهرسة المجلد. عدد العناصر المقروءة: ${files.size}"
                     } catch (error: Exception) {
                         status = "تعذرت قراءة المجلد: ${error.localizedMessage ?: "خطأ غير معروف"}"
                     } finally {
