@@ -1,11 +1,14 @@
 package com.mohamed.fileflow
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
 import android.content.ContentUris
 import android.net.Uri
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -68,21 +71,12 @@ fun DeviceStorageCard() {
 }
 
 object AllFilesIndexer {
-    fun hasAccess(): Boolean = android.os.Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager()
-
-    private fun classify(name: String, mime: String?): String {
-        val type = mime?.lowercase(Locale.ROOT).orEmpty()
-        val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-        return when {
-            type.startsWith("image/") || ext in setOf("jpg","jpeg","png","gif","webp","bmp","heic","heif","avif","tif","tiff","svg") -> "images"
-            type.startsWith("video/") || ext in setOf("mp4","mkv","mov","webm","avi","3gp","m4v","ts","mpeg","mpg") -> "videos"
-            type.startsWith("audio/") || ext in setOf("mp3","m4a","aac","wav","ogg","opus","flac","mid","midi","amr") -> "audio"
-            type == "application/pdf" || ext in setOf("pdf","doc","docx","xls","xlsx","ppt","pptx","odt","ods","odp","rtf","txt","md","epub") -> "documents"
-            type == "application/zip" || type == "application/x-rar-compressed" || ext in setOf("zip","rar","7z","tar","gz","bz2","xz") -> "archives"
-            ext in setOf("kt","kts","java","py","js","ts","tsx","jsx","html","css","xml","json","yaml","yml","toml","c","h","cpp","hpp","go","rs","sh","gradle","properties","sql") -> "code"
-            ext in setOf("apk","aab","apks","xapk") || type == "application/vnd.android.package-archive" -> "installers"
-            else -> "other"
-        }
+    fun hasAccess(context: Context): Boolean = when {
+        android.os.Build.VERSION.SDK_INT >= 30 -> Environment.isExternalStorageManager()
+        android.os.Build.VERSION.SDK_INT == 29 -> false // Android 10 scoped storage does not grant broad file access.
+        else -> ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun safeDisplayName(raw: String?): String {
@@ -104,7 +98,11 @@ object AllFilesIndexer {
             MediaStore.Files.FileColumns.DATE_MODIFIED,
             MediaStore.Files.FileColumns.MEDIA_TYPE
         )
-        context.contentResolver.query(collection, projection, null, null, MediaStore.Files.FileColumns.DISPLAY_NAME + " COLLATE NOCASE ASC")?.use { cursor ->
+        val cursor = context.contentResolver.query(
+            collection, projection, null, null,
+            MediaStore.Files.FileColumns.DISPLAY_NAME + " COLLATE NOCASE ASC"
+        ) ?: throw IllegalStateException("تعذر قراءة فهرس ملفات التخزين من Android")
+        cursor.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
             val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
@@ -125,7 +123,7 @@ object AllFilesIndexer {
                     mimeType = mime,
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
-                    category = classify(name, mime),
+                    category = FileClassifier.classify(name, mime),
                     source = "all-files"
                 )
             }
