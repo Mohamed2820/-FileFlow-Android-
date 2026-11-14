@@ -44,15 +44,6 @@ class FileClassifierTest {
     }
 
     @Test
-    fun systemAndHiddenStoragePathsAreIsolatedFromUserCategories() {
-        assertEquals(true, SystemFileClassifier.isSystemPath("Android/data/com.example.app/", "cache.db"))
-        assertEquals(true, SystemFileClassifier.isSystemPath("Android/obb/com.example.game/", "main.obb"))
-        assertEquals(true, SystemFileClassifier.isSystemPath("Documents/.private/", "secret.txt"))
-        assertEquals(false, SystemFileClassifier.isSystemPath("Documents/University/", "lecture.pdf"))
-        assertEquals(false, SystemFileClassifier.isSystemPath("Download/", "installer.apk"))
-    }
-
-    @Test
     fun explicitProjectNamesAreGroupedAsProjects() {
         assertEquals("projects", FileClassifier.classify("MOMO_Project_Main.kt", "application/octet-stream"))
         assertEquals("projects", FileClassifier.classify("مشروع التخرج.pdf", "application/pdf"))

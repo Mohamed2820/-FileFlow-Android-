@@ -50,7 +50,6 @@ object FileOperations {
     }
 
     fun rename(context: Context, file: IndexedFile, newName: String): FileOperationResult {
-        if (file.category == "system") return FileOperationResult(false, message = "ملفات النظام للعرض فقط ولا يمكن إعادة تسميتها من FileFlow.")
         val name = newName.trim()
         if (name.isBlank() || name == "." || name == ".." ||
             name.contains('/') || name.contains('\\') || name.any { it.code < 32 }
@@ -92,7 +91,6 @@ object FileOperations {
     }
 
     fun delete(context: Context, file: IndexedFile): FileOperationResult {
-        if (file.category == "system") return FileOperationResult(false, message = "حمايةً للهاتف، لا يمكن حذف ملفات النظام من FileFlow.")
         return runCatching {
             val uri = Uri.parse(file.uri)
 
@@ -127,7 +125,6 @@ object FileOperations {
         destinationTree: Uri,
         move: Boolean
     ): FileOperationResult {
-        if (file.category == "system") return FileOperationResult(false, message = "ملفات النظام للعرض فقط ولا يمكن نقلها أو نسخها من FileFlow.")
         var created: DocumentFile? = null
         return try {
             val destination = DocumentFile.fromTreeUri(context, destinationTree)
