@@ -171,12 +171,14 @@ class FileIndexDatabase(context: Context) :
             selection = "category = ? AND (? = '' OR name LIKE ? OR mime_type LIKE ?)"
             args = arrayOf(category, query, "%$query%", "%$query%")
         }
-        return queryFiles(selection, args)
+        return queryFiles("($selection) AND category != 'system'", args)
     }
+
+    fun systemFiles(): List<IndexedFile> = queryFiles("category = 'system'", null)
 
     fun countByCategory(): Map<String, Int> {
         val result = mutableMapOf<String, Int>()
-        readableDatabase.rawQuery("SELECT category, COUNT(*) FROM indexed_files GROUP BY category", null).use { cursor ->
+        readableDatabase.rawQuery("SELECT category, COUNT(*) FROM indexed_files WHERE category != 'system' GROUP BY category", null).use { cursor ->
             while (cursor.moveToNext()) result[cursor.getString(0)] = cursor.getInt(1)
         }
         readableDatabase.rawQuery("SELECT COUNT(*) FROM indexed_files WHERE size_bytes = 0", null).use { cursor ->
@@ -233,7 +235,7 @@ class FileIndexDatabase(context: Context) :
     }
 
     fun filesInCustomCategory(categoryId: String): List<IndexedFile> =
-        queryFiles("uri IN (SELECT uri FROM file_category_overrides WHERE category_id = ?)", arrayOf(categoryId))
+        queryFiles("category != 'system' AND uri IN (SELECT uri FROM file_category_overrides WHERE category_id = ?)", arrayOf(categoryId))
 
     private fun queryFiles(selection: String?, args: Array<String>?): List<IndexedFile> {
         val result = mutableListOf<IndexedFile>()
@@ -340,7 +342,8 @@ object AndroidFileIndexer {
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.MIME_TYPE,
             MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.DATE_MODIFIED
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.RELATIVE_PATH
         )
         val cursor = context.contentResolver.query(
             collection, projection, null, null,
@@ -352,15 +355,19 @@ object AndroidFileIndexer {
             val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
             val modifiedCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
+            val relativePathCol = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
+                val displayName = android.net.Uri.decode(cursor.getString(nameCol) ?: "بدون اسم")
+                val relativePath = if (cursor.isNull(relativePathCol)) "" else cursor.getString(relativePathCol).orEmpty()
+                val isSystemFile = SystemFileClassifier.isSystemPath(relativePath, displayName)
                 rows += IndexedFile(
                     uri = ContentUris.withAppendedId(collection, id).toString(),
-                    name = android.net.Uri.decode(cursor.getString(nameCol) ?: "بدون اسم"),
+                    name = displayName,
                     mimeType = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol),
                     sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
                     modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
-                    category = category,
+                    category = if (isSystemFile) "system" else category,
                     source = source
                 )
             }
