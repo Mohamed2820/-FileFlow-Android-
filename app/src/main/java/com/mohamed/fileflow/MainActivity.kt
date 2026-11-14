@@ -509,10 +509,81 @@ private fun MediaThumbnail(file: IndexedFile, selected: String, modifier: Modifi
     )
 }
 
+private fun secondaryFileGroup(file: IndexedFile): String {
+    val ext = file.name.substringAfterLast('.', "").lowercase()
+    return when (file.category) {
+        "images" -> when (ext) {
+            "jpg", "jpeg" -> "JPEG"
+            "png" -> "PNG"
+            "gif" -> "GIF"
+            "webp" -> "WebP"
+            "heic", "heif" -> "HEIF"
+            "svg" -> "SVG"
+            else -> "صور أخرى"
+        }
+        "videos" -> when (ext) {
+            "mp4", "m4v" -> "MP4"
+            "mkv" -> "MKV"
+            "mov" -> "MOV"
+            "webm" -> "WebM"
+            "avi" -> "AVI"
+            "3gp" -> "3GP"
+            else -> "فيديوهات أخرى"
+        }
+        "audio" -> when (ext) {
+            "mp3" -> "MP3"
+            "m4a", "aac" -> "AAC / M4A"
+            "wav" -> "WAV"
+            "flac" -> "FLAC"
+            "ogg", "opus" -> "OGG / OPUS"
+            else -> "صوتيات أخرى"
+        }
+        "documents" -> when (ext) {
+            "pdf" -> "PDF"
+            "doc", "docx" -> "Word"
+            "xls", "xlsx", "csv" -> "Excel / CSV"
+            "ppt", "pptx" -> "PowerPoint"
+            "txt", "rtf", "md" -> "نصوص"
+            "epub" -> "كتب إلكترونية"
+            else -> "مستندات أخرى"
+        }
+        "archives" -> when (ext) {
+            "zip" -> "ZIP"
+            "rar" -> "RAR"
+            "7z" -> "7Z"
+            "tar", "gz", "bz2", "xz" -> "TAR / GZIP"
+            else -> "أرشيفات أخرى"
+        }
+        "code" -> when (ext) {
+            "py" -> "Python"
+            "kt", "kts" -> "Kotlin"
+            "java" -> "Java"
+            "js", "ts", "jsx", "tsx" -> "JavaScript / TypeScript"
+            "html", "css" -> "Web"
+            "c", "h", "cpp", "hpp" -> "C / C++"
+            "json", "xml", "yaml", "yml", "toml", "properties" -> "ملفات إعدادات"
+            "sql" -> "SQL"
+            "sh" -> "Shell"
+            else -> "لغات أخرى"
+        }
+        "installers" -> when (ext) {
+            "apk" -> "APK"
+            "aab" -> "AAB"
+            "apks", "xapk" -> "حزم متعددة"
+            else -> "حزم أخرى"
+        }
+        "empty" -> "ملفات فارغة"
+        else -> file.mimeType?.substringBefore('/')?.takeIf { it.isNotBlank() }?.uppercase() ?: "غير معروف"
+    }
+}
+
 @Composable
 private fun IndexedFilesContent(selected: String, query: String, gridView: Boolean) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var files by remember(selected, query) { mutableStateOf<List<IndexedFile>>(emptyList()) }
+    var selectedGroup by remember(selected) { mutableStateOf("الكل") }
+    var sortMode by remember(selected) { mutableStateOf("date_desc") }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(selected, query) {
         files = withContext(Dispatchers.IO) {
@@ -526,12 +597,37 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
                 categoryFiles.filter { file ->
                     query.isBlank() || file.name.contains(query.trim(), ignoreCase = true) ||
                         (file.mimeType?.contains(query.trim(), ignoreCase = true) == true)
-                }.sortedBy { it.name.lowercase() }
+                }
             } finally {
                 database.close()
             }
         }
     }
+
+    val availableGroups = remember(files, selected) {
+        files.map { secondaryFileGroup(it) }.distinct().sorted()
+    }
+    val visibleFiles = remember(files, selectedGroup, sortMode) {
+        val filtered = if (selectedGroup == "الكل") files else files.filter {
+            secondaryFileGroup(it) == selectedGroup
+        }
+        when (sortMode) {
+            "name_desc" -> filtered.sortedByDescending { it.name.lowercase() }
+            "size_desc" -> filtered.sortedByDescending { it.sizeBytes }
+            "size_asc" -> filtered.sortedBy { it.sizeBytes }
+            "date_asc" -> filtered.sortedBy { it.modifiedSeconds }
+            "date_desc" -> filtered.sortedByDescending { it.modifiedSeconds }
+            else -> filtered.sortedBy { it.name.lowercase() }
+        }
+    }
+    val sortLabels = listOf(
+        "name_asc" to "الاسم: أ إلى ي",
+        "name_desc" to "الاسم: ي إلى أ",
+        "date_desc" to "الأحدث أولاً",
+        "date_asc" to "الأقدم أولاً",
+        "size_desc" to "الأكبر حجماً",
+        "size_asc" to "الأصغر حجماً"
+    )
 
     fun openFile(file: IndexedFile) {
         try {
@@ -550,94 +646,154 @@ private fun IndexedFilesContent(selected: String, query: String, gridView: Boole
         }
     }
 
-    if (files.isEmpty()) {
-        EmptyState(
-            Icons.Rounded.FolderOpen,
-            "لا توجد ملفات مفهرسة في هذا القسم",
-            "ارجع للرئيسية وحدّث فهرسة الملفات، ثم افتح القسم مرة أخرى."
-        )
-    } else if ((selected == "images" || selected == "videos") && gridView) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            gridItems(files, key = { it.uri }) { file ->
-                Column(
-                    modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    MediaThumbnail(
-                        file = file,
-                        selected = selected,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+    Column(Modifier.fillMaxSize()) {
+        if (files.isNotEmpty()) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${visibleFiles.size} ملف",
+                        color = muted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(file.name, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground)
-                    Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 10.sp, color = muted)
+                    Box {
+                        TextButton(onClick = { sortMenuExpanded = true }) {
+                            Icon(Icons.Rounded.Sort, null, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text(sortLabels.firstOrNull { it.first == sortMode }?.second ?: "ترتيب")
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false }
+                        ) {
+                            sortLabels.forEach { (key, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = {
+                                        sortMode = key
+                                        sortMenuExpanded = false
+                                    },
+                                    leadingIcon = {
+                                        if (sortMode == key) Icon(Icons.Rounded.Check, null)
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
-            }
-        }
-    } else if (gridView) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 148.dp),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            gridItems(files, key = { it.uri }) { file ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Icon(fileCategoryIcon(file.category), null, tint = brand, modifier = Modifier.size(30.dp))
-                        Spacer(Modifier.height(10.dp))
-                        Text(file.name, maxLines = 2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            "${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
-                            maxLines = 2,
-                            fontSize = 10.sp,
-                            color = muted
-                        )
+                if (availableGroups.isNotEmpty()) {
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        contentPadding = PaddingValues(bottom = 8.dp)
+                    ) {
+                        item {
+                            FilterChip(
+                                selected = selectedGroup == "الكل",
+                                onClick = { selectedGroup = "الكل" },
+                                label = { Text("الكل") }
+                            )
+                        }
+                        items(availableGroups) { group ->
+                            FilterChip(
+                                selected = selectedGroup == group,
+                                onClick = { selectedGroup = group },
+                                label = { Text(group) }
+                            )
+                        }
                     }
                 }
             }
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
-        ) {
-            items(files, key = { it.uri }) { file ->
-                ListItem(
-                    headlineContent = { Text(file.name, maxLines = 1) },
-                    supportingContent = {
-                        Text(
-                            "${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
-                            color = muted,
-                            fontSize = 11.sp
-                        )
-                    },
-                    leadingContent = {
-                        if (selected == "images" || selected == "videos") {
-                            MediaThumbnail(
-                                file = file,
-                                selected = selected,
-                                modifier = Modifier.size(58.dp)
-                            )
-                        } else {
-                            Icon(fileCategoryIcon(file.category), null, tint = brand)
+
+        when {
+            files.isEmpty() -> EmptyState(
+                Icons.Rounded.FolderOpen,
+                "لا توجد ملفات مفهرسة في هذا القسم",
+                "ارجع للرئيسية وحدّث فهرسة الملفات، ثم افتح القسم مرة أخرى."
+            )
+            visibleFiles.isEmpty() -> EmptyState(
+                Icons.Rounded.FilterListOff,
+                "لا توجد ملفات في هذا التصنيف الفرعي",
+                "اختر تصنيفًا فرعيًا آخر أو اعرض كل الملفات."
+            )
+            (selected == "images" || selected == "videos") && gridView -> {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    gridItems(visibleFiles, key = { it.uri }) { file ->
+                        Column(
+                            modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            MediaThumbnail(file, selected, Modifier.fillMaxWidth().aspectRatio(1f))
+                            Spacer(Modifier.height(4.dp))
+                            Text(file.name, maxLines = 1, fontSize = 11.sp, color = MaterialTheme.colorScheme.onBackground)
+                            Text(formatBytes(file.sizeBytes), maxLines = 1, fontSize = 10.sp, color = muted)
                         }
-                    },
-                    modifier = Modifier.clickable { openFile(file) }
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+            gridView -> {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 148.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    gridItems(visibleFiles, key = { it.uri }) { file ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth().clickable { openFile(file) },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                                Icon(fileCategoryIcon(file.category), null, tint = brand, modifier = Modifier.size(30.dp))
+                                Spacer(Modifier.height(10.dp))
+                                Text(file.name, maxLines = 2, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "${secondaryFileGroup(file)} • ${formatBytes(file.sizeBytes)}",
+                                    maxLines = 2,
+                                    fontSize = 10.sp,
+                                    color = muted
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
+                ) {
+                    items(visibleFiles, key = { it.uri }) { file ->
+                        ListItem(
+                            headlineContent = { Text(file.name, maxLines = 1) },
+                            supportingContent = {
+                                Text(
+                                    "${secondaryFileGroup(file)} • ${file.mimeType ?: "نوع غير معروف"} • ${formatBytes(file.sizeBytes)}",
+                                    color = muted,
+                                    fontSize = 11.sp
+                                )
+                            },
+                            leadingContent = {
+                                if (selected == "images" || selected == "videos") {
+                                    MediaThumbnail(file, selected, Modifier.size(58.dp))
+                                } else {
+                                    Icon(fileCategoryIcon(file.category), null, tint = brand)
+                                }
+                            },
+                            modifier = Modifier.clickable { openFile(file) }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
             }
         }
     }
