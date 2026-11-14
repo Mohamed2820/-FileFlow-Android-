@@ -11,6 +11,7 @@ import android.database.sqlite.SQLiteException
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import java.util.ArrayDeque
@@ -412,7 +413,9 @@ object AndroidFileIndexer {
         var skippedEntries = 0
         val visitedDirectories = mutableSetOf<String>()
         val pending = ArrayDeque<Pair<DocumentFile, String>>()
-        pending.addLast(root to (root.name ?: ""))
+        val selectedDocumentPath = runCatching { DocumentsContract.getTreeDocumentId(treeUri).substringAfter(':', "") }.getOrDefault("")
+        val initialPath = listOf(selectedDocumentPath, root.name.orEmpty()).filter { it.isNotBlank() }.joinToString("/")
+        pending.addLast(root to initialPath)
 
         // Iterative traversal avoids stack overflow on deeply nested provider trees.
         // A faulty provider or revoked child permission must not stop other folders.
