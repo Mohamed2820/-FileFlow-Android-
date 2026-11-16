@@ -190,6 +190,20 @@ object AllFilesIndexer {
         // Always include the primary shared storage root.
         addRoot(Environment.getExternalStorageDirectory())
 
+        // Older Android versions do not expose StorageVolume.getDirectory().
+        // Enumerate mounted /storage children as a best-effort SD-card fallback.
+        try {
+            File("/storage").listFiles()?.forEach { volumeRoot ->
+                if (volumeRoot.name != "emulated" && volumeRoot.name != "self") {
+                    addRoot(volumeRoot)
+                }
+            }
+        } catch (error: Exception) {
+            skipped++
+            issues += ScanIssue("/storage",
+                "تعذر تعداد مجلدات التخزين: ${error.localizedMessage ?: error.javaClass.simpleName}")
+        }
+
         // Android 11+ exposes the mounted storage-volume directories. This
         // discovers removable SD-card roots without assuming a fixed UUID path.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -259,7 +273,8 @@ object AllFilesIndexer {
                         val isAndroidProtected = normalizedParent.equals("Android", ignoreCase = true) &&
                             (name.equals("data", ignoreCase = true) || name.equals("obb", ignoreCase = true))
                         if (isAndroidProtected) {
-                            skipped++
+                            // Expected Android restriction: surface it as a warning,
+                            // but do not mark the accessible shared-storage scan incomplete.
                             issues += ScanIssue(child.absolutePath,
                                 "مجلد محمي بواسطة Android (Android/data أو Android/obb)، لا يمكن فهرسته.")
                         } else {
