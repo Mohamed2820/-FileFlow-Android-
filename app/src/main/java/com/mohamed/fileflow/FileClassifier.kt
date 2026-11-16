@@ -100,7 +100,8 @@ object FileClassifier {
         if (best != null && best.second >= 2.0) {
             val confidence = ((best.second - secondScore) / best.second).coerceIn(0.0, 1.0)
             if (confidence >= 0.25) {
-                return SmartClassification("study", best.first, confidence)
+                val textAdjustedConfidence = if (normalizedText.isBlank()) confidence * 0.5 else confidence
+                return SmartClassification("study", best.first, textAdjustedConfidence)
             }
         }
 
@@ -114,7 +115,10 @@ object FileClassifier {
             if (matchesTerm(normalizedPath, normalizedTerm)) value += 4.0
             value
         }
-        if (projectScore >= 5.0) return SmartClassification("projects", confidence = 1.0)
+        if (projectScore >= 5.0) {
+            val textAdjustedConfidence = if (normalizedText.isBlank()) 0.5 else 1.0
+            return SmartClassification("projects", confidence = textAdjustedConfidence)
+        }
 
         return SmartClassification(fallback, confidence = 0.0)
     }
