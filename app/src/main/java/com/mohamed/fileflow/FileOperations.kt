@@ -92,7 +92,7 @@ object FileOperations {
                 val values = ContentValues().apply { put(MediaStore.MediaColumns.DISPLAY_NAME, name) }
                 val changed = context.contentResolver.update(uri, values, null, null)
                 if (changed > 0) {
-                    return FileOperationResult(true, file.copy(name = name), "تمت إعادة التسمية.")
+                    return FileOperationResult(true, file.copy(uri = Uri.fromFile(target).toString(), name = name), "تمت إعادة التسمية.")
                 }
             }
 
