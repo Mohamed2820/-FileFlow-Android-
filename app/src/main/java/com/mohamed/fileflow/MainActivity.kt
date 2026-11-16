@@ -370,8 +370,9 @@ private fun HomeScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var indexRevision by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(categories.size) {
+    LaunchedEffect(categories.size, indexRevision) {
         counts = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
@@ -423,7 +424,7 @@ private fun HomeScreen(
                 }
             }
         }
-        item { StorageAccessPanel() }
+        item { StorageAccessPanel(onIndexUpdated = { indexRevision++ }) }
         item { DeviceStorageCard() }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -839,7 +840,7 @@ private fun extensionLabel(file: IndexedFile): String {
 }
 
 private fun studySubjectLabel(file: IndexedFile): String =
-    FileClassifier.studySubject(file.name) ?: "مواد دراسية أخرى"
+    file.subCategory ?: FileClassifier.studySubject(file.name) ?: "مواد دراسية أخرى"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1447,7 +1448,14 @@ private fun IndexedFilesContent(
 
 private fun openFileExternally(context: android.content.Context, file: IndexedFile) {
     runCatching {
-        val uri = Uri.parse(file.uri)
+        val sourceUri = Uri.parse(file.uri)
+        val uri = if (sourceUri.scheme == "file") {
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                java.io.File(sourceUri.path ?: throw IllegalArgumentException("مسار الملف غير متاح"))
+            )
+        } else sourceUri
         val mime = FileOperations.mimeType(context, file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mime)
@@ -1466,7 +1474,14 @@ private fun openFileExternally(context: android.content.Context, file: IndexedFi
 
 private fun shareIndexedFile(context: android.content.Context, file: IndexedFile) {
     runCatching {
-        val uri = Uri.parse(file.uri)
+        val sourceUri = Uri.parse(file.uri)
+        val uri = if (sourceUri.scheme == "file") {
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                java.io.File(sourceUri.path ?: throw IllegalArgumentException("مسار الملف غير متاح"))
+            )
+        } else sourceUri
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = FileOperations.mimeType(context, file)
             putExtra(Intent.EXTRA_STREAM, uri)

@@ -26,16 +26,21 @@ data class IndexedFile(
     val sizeBytes: Long,
     val modifiedSeconds: Long,
     val category: String,
-    val source: String
+    val source: String,
+    val subCategory: String? = null,
+    val confidence: Double = 0.0
 )
+
+data class ScanIssue(val path: String, val reason: String)
 
 data class TreeScanResult(
     val files: List<IndexedFile>,
-    val skippedEntries: Int
+    val skippedEntries: Int,
+    val issues: List<ScanIssue> = emptyList()
 )
 
 class FileIndexDatabase(context: Context) :
-    SQLiteOpenHelper(context, "fileflow-index.db", null, 4) {
+    SQLiteOpenHelper(context, "fileflow-index.db", null, 5) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -47,13 +52,15 @@ class FileIndexDatabase(context: Context) :
                 size_bytes INTEGER NOT NULL,
                 modified_seconds INTEGER NOT NULL,
                 category TEXT NOT NULL,
-                source TEXT NOT NULL
+                source TEXT NOT NULL,
+                sub_category TEXT,
+                confidence REAL NOT NULL DEFAULT 0.0
             )
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_indexed_files_category ON indexed_files(category)")
         db.execSQL("CREATE INDEX idx_indexed_files_name ON indexed_files(name)")
-        db.execSQL("CREATE TABLE category_overrides (uri TEXT PRIMARY KEY NOT NULL, category TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE category_overrides (uri TEXT PRIMARY KEY NOT NULL, category TEXT NOT NULL, sub_category TEXT)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -89,14 +96,21 @@ class FileIndexDatabase(context: Context) :
         if (oldVersion < 4) {
             db.execSQL("CREATE TABLE IF NOT EXISTS category_overrides (uri TEXT PRIMARY KEY NOT NULL, category TEXT NOT NULL)")
         }
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE indexed_files ADD COLUMN sub_category TEXT")
+            db.execSQL("ALTER TABLE indexed_files ADD COLUMN confidence REAL NOT NULL DEFAULT 0.0")
+            db.execSQL("ALTER TABLE category_overrides ADD COLUMN sub_category TEXT")
+        }
     }
 
-    private fun manualCategory(uri: String): String? {
+    private fun manualClassification(uri: String): Pair<String, String?>? {
         readableDatabase.query(
-            "category_overrides", arrayOf("category"), "uri = ?", arrayOf(uri),
+            "category_overrides", arrayOf("category", "sub_category"), "uri = ?", arrayOf(uri),
             null, null, null
         ).use { cursor ->
-            return if (cursor.moveToFirst()) cursor.getString(0) else null
+            return if (cursor.moveToFirst()) {
+                cursor.getString(0) to if (cursor.isNull(1)) null else cursor.getString(1)
+            } else null
         }
     }
 
@@ -111,8 +125,11 @@ class FileIndexDatabase(context: Context) :
                     put("mime_type", file.mimeType)
                     put("size_bytes", file.sizeBytes)
                     put("modified_seconds", file.modifiedSeconds)
-                    put("category", manualCategory(file.uri) ?: file.category)
+                    val manual = manualClassification(file.uri)
+                    put("category", manual?.first ?: file.category)
                     put("source", file.source)
+                    put("sub_category", if (manual != null) manual.second else file.subCategory)
+                    put("confidence", if (manual != null) 1.0 else file.confidence)
                 }
                 val insertedRowId = writableDatabase.insertWithOnConflict(
                     "indexed_files", null, values, SQLiteDatabase.CONFLICT_REPLACE
@@ -138,8 +155,11 @@ class FileIndexDatabase(context: Context) :
                     put("mime_type", file.mimeType)
                     put("size_bytes", file.sizeBytes)
                     put("modified_seconds", file.modifiedSeconds)
-                    put("category", manualCategory(file.uri) ?: file.category)
+                    val manual = manualClassification(file.uri)
+                    put("category", manual?.first ?: file.category)
                     put("source", file.source)
+                    put("sub_category", if (manual != null) manual.second else file.subCategory)
+                    put("confidence", if (manual != null) 1.0 else file.confidence)
                 }
                 val row = writableDatabase.insertWithOnConflict(
                     "indexed_files", null, values, SQLiteDatabase.CONFLICT_REPLACE
@@ -169,12 +189,17 @@ class FileIndexDatabase(context: Context) :
         if (uris.isEmpty()) return
         writableDatabase.beginTransaction()
         try {
-            val values = ContentValues().apply { put("category", category) }
+            val values = ContentValues().apply {
+                put("category", category)
+                putNull("sub_category")
+                put("confidence", 1.0)
+            }
             uris.forEach { uri ->
                 writableDatabase.update("indexed_files", values, "uri = ?", arrayOf(uri))
                 val override = ContentValues().apply {
                     put("uri", uri)
                     put("category", category)
+                    putNull("sub_category")
                 }
                 writableDatabase.insertWithOnConflict(
                     "category_overrides", null, override, SQLiteDatabase.CONFLICT_REPLACE
@@ -199,7 +224,9 @@ class FileIndexDatabase(context: Context) :
                     sizeBytes = cursor.getLong(cursor.getColumnIndexOrThrow("size_bytes")),
                     modifiedSeconds = cursor.getLong(cursor.getColumnIndexOrThrow("modified_seconds")),
                     category = cursor.getString(cursor.getColumnIndexOrThrow("category")),
-                    source = cursor.getString(cursor.getColumnIndexOrThrow("source"))
+                    source = cursor.getString(cursor.getColumnIndexOrThrow("source")),
+                    subCategory = cursor.getString(cursor.getColumnIndexOrThrow("sub_category")),
+                    confidence = cursor.getDouble(cursor.getColumnIndexOrThrow("confidence"))
                 )
             }
         }
@@ -322,54 +349,96 @@ object AndroidFileIndexer {
 
     fun scanPickedTree(context: Context, treeUri: Uri): TreeScanResult {
         val root = DocumentFile.fromTreeUri(context, treeUri)
-            ?: return TreeScanResult(emptyList(), skippedEntries = 1)
+            ?: return TreeScanResult(emptyList(), skippedEntries = 1,
+                issues = listOf(ScanIssue(treeUri.toString(), "تعذر فتح مجلد الفهرسة المحدد.")))
+        data class PendingDirectory(val document: DocumentFile, val relativePath: String)
         val rows = mutableListOf<IndexedFile>()
+        val issues = mutableListOf<ScanIssue>()
         var skippedEntries = 0
         val visitedDirectories = mutableSetOf<String>()
-        val pending = ArrayDeque<DocumentFile>()
-        pending.addLast(root)
+        val pending = ArrayDeque<PendingDirectory>()
+        pending.addLast(PendingDirectory(root, root.name.orEmpty()))
 
-        // Iterative traversal avoids stack overflow on deeply nested provider trees.
-        // A faulty provider or revoked child permission must not stop other folders.
         while (pending.isNotEmpty()) {
-            val directory = pending.removeLast()
+            val current = pending.removeLast()
+            val directory = current.document
             if (!visitedDirectories.add(directory.uri.toString())) continue
 
             val children = try {
                 directory.listFiles()
-            } catch (_: SecurityException) {
+            } catch (error: SecurityException) {
                 skippedEntries++
+                issues += ScanIssue(directory.uri.toString(),
+                    "صلاحية مرفوضة: ${error.localizedMessage ?: error.javaClass.simpleName}")
                 continue
-            } catch (_: Exception) {
+            } catch (error: Exception) {
                 skippedEntries++
+                issues += ScanIssue(directory.uri.toString(),
+                    "تعذر سرد المجلد: ${error.localizedMessage ?: error.javaClass.simpleName}")
                 continue
             }
 
             for (child in children) {
                 try {
+                    val childName = child.name?.takeIf { it.isNotBlank() } ?: "بدون اسم"
                     when {
-                        child.isDirectory -> pending.addLast(child)
+                        child.isDirectory -> {
+                            val childPath = if (current.relativePath.isBlank()) childName
+                                else "${current.relativePath}/$childName"
+                            if (childName.equals("data", true) &&
+                                current.relativePath.endsWith("/Android", true)) {
+                                skippedEntries++
+                                issues += ScanIssue(child.uri.toString(),
+                                    "مجلد Android/data محجوب من النظام أو مزود الملفات.")
+                            } else if (childName.equals("obb", true) &&
+                                current.relativePath.endsWith("/Android", true)) {
+                                skippedEntries++
+                                issues += ScanIssue(child.uri.toString(),
+                                    "مجلد Android/obb محجوب من النظام أو مزود الملفات.")
+                            } else {
+                                pending.addLast(PendingDirectory(child, childPath))
+                            }
+                        }
                         child.isFile -> {
-                            val name = child.name?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
-                            val mime = child.type
+                            // DocumentFile.name is already decoded. Decoding it again corrupts
+                            // legitimate percent signs and encoded-looking filenames.
+                            val name = childName
+                            val size = queryDocumentSize(context, child.uri) ?: -1L
+                            val modified = child.lastModified().coerceAtLeast(0L) / 1000L
+                            val extraction = FileContentReader.extract(context, child.uri, name, size)
+                            if (extraction.error != null) {
+                                issues += ScanIssue(child.uri.toString(), extraction.error)
+                            }
+                            val classification = FileClassifier.classifyDetailed(
+                                name = name,
+                                mimeType = child.type,
+                                parentPath = current.relativePath,
+                                extractedText = extraction.text
+                            )
                             rows += IndexedFile(
                                 uri = child.uri.toString(),
                                 name = name,
-                                mimeType = mime,
-                                sizeBytes = queryDocumentSize(context, child.uri) ?: -1L,
-                                modifiedSeconds = (child.lastModified().coerceAtLeast(0L)) / 1000L,
-                                category = FileClassifier.classify(name, mime),
-                                source = "saf:$treeUri"
+                                mimeType = child.type,
+                                sizeBytes = size,
+                                modifiedSeconds = modified,
+                                category = classification.mainCategory,
+                                source = "saf:$treeUri",
+                                subCategory = classification.subCategory,
+                                confidence = classification.confidence
                             )
                         }
                     }
-                } catch (_: SecurityException) {
+                } catch (error: SecurityException) {
                     skippedEntries++
-                } catch (_: Exception) {
+                    issues += ScanIssue(child.uri.toString(),
+                        "صلاحية مرفوضة: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                } catch (error: Exception) {
                     skippedEntries++
+                    issues += ScanIssue(child.uri.toString(),
+                        "تعذر فهرسة العنصر: ${error.localizedMessage ?: error.javaClass.simpleName}")
                 }
             }
         }
-        return TreeScanResult(rows, skippedEntries)
+        return TreeScanResult(rows, skippedEntries, issues)
     }
 }

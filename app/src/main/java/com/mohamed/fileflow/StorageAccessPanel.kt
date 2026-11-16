@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun StorageAccessPanel() {
+fun StorageAccessPanel(onIndexUpdated: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -45,16 +45,16 @@ fun StorageAccessPanel() {
             status = "جارٍ فحص الملفات وحفظ بياناتها محليًا..."
             try {
                 val broadAccessAtScan = AllFilesIndexer.hasAccess(context)
-                // With broad access, scan MediaStore.Files once so photos/videos/audio
-                // are not omitted when their separate granular permissions are absent.
+                // The broad-access path walks mounted shared-storage volumes directly.
                 val media = if (broadAccessAtScan) emptyList() else withContext(Dispatchers.IO) {
                     AndroidFileIndexer.scanMedia(context)
                 }
-                val allFiles = if (broadAccessAtScan) {
+                val scanResult = if (broadAccessAtScan) {
                     withContext(Dispatchers.IO) { AllFilesIndexer.scan(context) }
                 } else {
-                    emptyList()
+                    TreeScanResult(emptyList(), 0)
                 }
+                val allFiles = scanResult.files
 
                 val count = withContext(Dispatchers.IO) {
                     val db = FileIndexDatabase(context)
@@ -62,7 +62,12 @@ fun StorageAccessPanel() {
                         if (broadAccessAtScan) {
                             // The full index now includes media too; remove the older
                             // MediaStore collection rows to avoid duplicate cards.
-                            db.replaceSource("all-files", allFiles)
+                            if (scanResult.skippedEntries == 0) {
+                                db.replaceSource("all-files", allFiles)
+                            } else {
+                                // Keep previous rows when a protected subtree could not be scanned.
+                                db.upsertFiles(allFiles)
+                            }
                             db.replaceSource("image", emptyList())
                             db.replaceSource("video", emptyList())
                             db.replaceSource("audio", emptyList())
@@ -86,7 +91,15 @@ fun StorageAccessPanel() {
 
                 indexedCount = count
                 hasBroadAccess = AllFilesIndexer.hasAccess(context)
-                status = "اكتمل الفحص: ${media.size + allFiles.size} ملف في الفهرس. عدد الملفات المحفوظة في قاعدة البيانات: $count."
+                onIndexUpdated()
+                status = when {
+                    broadAccessAtScan && scanResult.skippedEntries > 0 ->
+                        "اكتمل الفحص جزئيًا: تم اكتشاف ${allFiles.size} ملف، وتعذرت قراءة ${scanResult.skippedEntries} مجلد/عنصر. احتفظت بنتائج الفحص السابق. ${scanResult.issues.firstOrNull()?.reason.orEmpty()} إجمالي السجلات: $count."
+                    broadAccessAtScan && scanResult.issues.isNotEmpty() ->
+                        "اكتمل فحص ${allFiles.size} ملف، مع ${scanResult.issues.size} تحذير (منها مجلدات Android المحمية أو ملفات تعذر استخراج نصها). إجمالي السجلات: $count."
+                    else ->
+                        "اكتمل الفحص: ${media.size + allFiles.size} ملف تم اكتشافه. إجمالي الملفات المحفوظة: $count."
+                }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -140,10 +153,11 @@ fun StorageAccessPanel() {
                             }
                         }
                         indexedCount = count
+                        onIndexUpdated()
                         status = if (scanResult.skippedEntries == 0) {
                             "اكتملت فهرسة المجلد: ${scanResult.files.size} ملف."
                         } else {
-                            "الفهرسة غير مكتملة: تعذرت قراءة ${scanResult.skippedEntries} عناصر/مجلدات. لم أستبدل الفهرس السابق حتى لا أفقد بياناته. حاول اختيار المجلد مرة أخرى بعد مراجعة الصلاحيات."
+                            "الفهرسة جزئية: تم اكتشاف ${scanResult.files.size} ملف، وتعذرت قراءة ${scanResult.skippedEntries} عناصر/مجلدات. ${scanResult.issues.firstOrNull()?.reason.orEmpty()} احتفظت بنتائج الفهرسة السابقة."
                         }
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -276,7 +290,7 @@ fun StorageAccessPanel() {
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("تحديث فهرسة الصور والفيديو والصوت")
+                Text("إعادة فهرسة جميع الملفات")
             }
 
             TextButton(

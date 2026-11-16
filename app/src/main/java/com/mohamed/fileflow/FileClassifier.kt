@@ -8,6 +8,12 @@ import java.util.Locale
  * Named academic subjects and explicit project names are evaluated before
  * source-code extensions so a file such as "Genetics.py" belongs to Study.
  */
+data class SmartClassification(
+    val mainCategory: String,
+    val subCategory: String? = null,
+    val confidence: Double = 0.0
+)
+
 object FileClassifier {
     private val imageExtensions = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "avif", "tif", "tiff", "svg")
     private val videoExtensions = setOf("mp4", "mkv", "mov", "webm", "avi", "3gp", "m4v", "ts", "mpeg", "mpg")
@@ -56,6 +62,77 @@ object FileClassifier {
         return bestSubject
     }
 
+
+    /**
+     * Classifies semantic documents using filename, all parent-folder names and
+     * extracted text. The file extension is retained only as the third-level
+     * grouping key; it never overrides a confident subject match.
+     */
+    fun classifyDetailed(
+        name: String,
+        mimeType: String?,
+        parentPath: String = "",
+        extractedText: String = ""
+    ): SmartClassification {
+        val fallback = classify(name, mimeType)
+        if (fallback in setOf("images", "videos", "audio", "installers")) {
+            return SmartClassification(fallback)
+        }
+
+        val normalizedName = normalize(name)
+        val normalizedPath = normalize(parentPath)
+        val normalizedText = normalize(extractedText.take(20_000))
+        val scores = studySubjects.map { (subject, terms) ->
+            val score = terms.distinct().sumOf { term ->
+                val normalizedTerm = normalize(term)
+                var value = 0.0
+                val occurrences = countTerm(normalizedText, normalizedTerm)
+                if (occurrences > 0) value += 3.0 * kotlin.math.ln1p(occurrences.toDouble())
+                if (matchesTerm(normalizedName, normalizedTerm)) value += 5.0
+                if (matchesTerm(normalizedPath, normalizedTerm)) value += 4.0
+                value
+            }
+            subject to score
+        }.sortedByDescending { it.second }
+
+        val best = scores.firstOrNull()
+        val secondScore = scores.getOrNull(1)?.second ?: 0.0
+        if (best != null && best.second >= 2.0) {
+            val confidence = ((best.second - secondScore) / best.second).coerceIn(0.0, 1.0)
+            if (confidence >= 0.25) {
+                val textAdjustedConfidence = if (normalizedText.isBlank()) confidence * 0.5 else confidence
+                return SmartClassification("study", best.first, textAdjustedConfidence)
+            }
+        }
+
+        val projectTerms = listOf("مشروع", "مشاريع", "مشروعات", "project", "projects")
+        val projectScore = projectTerms.sumOf { term ->
+            val normalizedTerm = normalize(term)
+            var value = 0.0
+            val occurrences = countTerm(normalizedText, normalizedTerm)
+            if (occurrences > 0) value += 3.0 * kotlin.math.ln1p(occurrences.toDouble())
+            if (matchesTerm(normalizedName, normalizedTerm)) value += 5.0
+            if (matchesTerm(normalizedPath, normalizedTerm)) value += 4.0
+            value
+        }
+        if (projectScore >= 5.0) {
+            val textAdjustedConfidence = if (normalizedText.isBlank()) 0.5 else 1.0
+            return SmartClassification("projects", confidence = textAdjustedConfidence)
+        }
+
+        return SmartClassification(fallback, confidence = 0.0)
+    }
+
+    private fun countTerm(text: String, term: String): Int {
+        if (text.isBlank() || term.isBlank()) return 0
+        return if (term.any { it.code in 0x0600..0x06FF }) {
+            Regex(Regex.escape(term)).findAll(text).count()
+        } else {
+            Regex("(^|[^a-z0-9])" + Regex.escape(term) + "([^a-z0-9]|$)")
+                .findAll(text).count()
+        }
+    }
+
     fun classify(name: String, mimeType: String?): String {
         val mime = mimeType?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT).orEmpty()
         val normalizedName = normalize(name)
@@ -91,11 +168,18 @@ object FileClassifier {
 
     private fun normalize(value: String): String = value
         .lowercase(Locale.ROOT)
+        .replace(Regex("[\\u064B-\\u065F\\u0670\\u0640]"), "")
         .replace('أ', 'ا')
         .replace('إ', 'ا')
         .replace('آ', 'ا')
-        .replace('ى', 'ي')
         .replace('ة', 'ه')
+        .replace('ى', 'ي')
+        .map { character ->
+            if (character in '\u0660'..'\u0669') {
+                ('0'.code + (character.code - '\u0660'.code)).toChar()
+            } else character
+        }
+        .joinToString("")
         .replace('_', ' ')
         .replace('-', ' ')
         .replace('.', ' ')
