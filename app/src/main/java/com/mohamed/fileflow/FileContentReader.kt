@@ -59,7 +59,7 @@ object FileContentReader {
             ExtractedContent(
                 "",
                 "extraction_error",
-                "\${error.javaClass.simpleName}: \${error.localizedMessage ?: error.message ?: "unknown extraction error"}"
+                error.javaClass.simpleName + ": " + (error.localizedMessage ?: error.message ?: "unknown extraction error")
             )
         }
     }
