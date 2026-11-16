@@ -92,10 +92,13 @@ fun StorageAccessPanel(onIndexUpdated: () -> Unit = {}) {
                 indexedCount = count
                 hasBroadAccess = AllFilesIndexer.hasAccess(context)
                 onIndexUpdated()
-                status = if (broadAccessAtScan && scanResult.skippedEntries > 0) {
-                    "اكتمل الفحص جزئيًا: تم اكتشاف ${allFiles.size} ملف، وتعذرت قراءة ${scanResult.skippedEntries} مجلد/عنصر. لم تُحذف نتائج الفحص السابق. ${scanResult.issues.firstOrNull()?.reason.orEmpty()} إجمالي السجلات: $count."
-                } else {
-                    "اكتمل الفحص: ${media.size + allFiles.size} ملف تم اكتشافه. إجمالي الملفات المحفوظة: $count."
+                status = when {
+                    broadAccessAtScan && scanResult.skippedEntries > 0 ->
+                        "اكتمل الفحص جزئيًا: تم اكتشاف ${allFiles.size} ملف، وتعذرت قراءة ${scanResult.skippedEntries} مجلد/عنصر. احتفظت بنتائج الفحص السابق. ${scanResult.issues.firstOrNull()?.reason.orEmpty()} إجمالي السجلات: $count."
+                    broadAccessAtScan && scanResult.issues.isNotEmpty() ->
+                        "اكتمل فحص ${allFiles.size} ملف، مع ${scanResult.issues.size} تحذير (منها مجلدات Android المحمية أو ملفات تعذر استخراج نصها). إجمالي السجلات: $count."
+                    else ->
+                        "اكتمل الفحص: ${media.size + allFiles.size} ملف تم اكتشافه. إجمالي الملفات المحفوظة: $count."
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
