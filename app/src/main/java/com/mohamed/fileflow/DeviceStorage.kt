@@ -3,12 +3,13 @@ package com.mohamed.fileflow
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.os.storage.StorageManager
 import android.app.usage.StorageStatsManager
-import android.provider.MediaStore
-import android.content.ContentUris
+import android.webkit.MimeTypeMap
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +27,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.util.Locale
+import java.io.File
+import java.util.ArrayDeque
 
 data class DeviceStorageInfo(val total: Long, val available: Long, val used: Long)
 
@@ -142,48 +145,182 @@ fun DeviceStorageCard() {
 
 object AllFilesIndexer {
     fun hasAccess(context: Context): Boolean = when {
-        android.os.Build.VERSION.SDK_INT >= 30 -> Environment.isExternalStorageManager()
-        android.os.Build.VERSION.SDK_INT == 29 -> false // Android 10 scoped storage does not grant broad file access.
+        Build.VERSION.SDK_INT >= 30 -> Environment.isExternalStorageManager()
+        Build.VERSION.SDK_INT == 29 -> false
         else -> ContextCompat.checkSelfPermission(
             context, Manifest.permission.READ_EXTERNAL_STORAGE
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    fun scan(context: Context): List<IndexedFile> {
+    /**
+     * Enumerates mounted shared-storage roots directly rather than relying on
+     * MediaStore's media/document index. This includes ordinary files and
+     * removable volumes when Android exposes their mounted directories.
+     */
+    fun scan(context: Context): TreeScanResult {
+        if (!hasAccess(context)) {
+            return TreeScanResult(
+                emptyList(),
+                1,
+                listOf(ScanIssue("storage", "لم يمنح Android صلاحية الوصول الشامل إلى الملفات."))
+            )
+        }
+
+        val issues = mutableListOf<ScanIssue>()
         val rows = mutableListOf<IndexedFile>()
-        val collection = MediaStore.Files.getContentUri("external")
-        val projection = arrayOf(
-            MediaStore.Files.FileColumns._ID,
-            MediaStore.Files.FileColumns.DISPLAY_NAME,
-            MediaStore.Files.FileColumns.MIME_TYPE,
-            MediaStore.Files.FileColumns.SIZE,
-            MediaStore.Files.FileColumns.DATE_MODIFIED
-        )
-        val cursor = context.contentResolver.query(
-            collection, projection, null, null,
-            MediaStore.Files.FileColumns.DISPLAY_NAME + " COLLATE NOCASE ASC"
-        ) ?: throw IllegalStateException("تعذر قراءة فهرس ملفات التخزين من Android")
-        cursor.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
-            val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
-            val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
-            val modifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DATE_MODIFIED)
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                val mime = if (cursor.isNull(mimeCol)) null else cursor.getString(mimeCol)
-                val name = cursor.getString(nameCol)?.takeIf { it.isNotBlank() }?.let { android.net.Uri.decode(it) } ?: "بدون اسم"
-                rows += IndexedFile(
-                    uri = ContentUris.withAppendedId(collection, id).toString(),
-                    name = name,
-                    mimeType = mime,
-                    sizeBytes = if (cursor.isNull(sizeCol)) -1L else cursor.getLong(sizeCol),
-                    modifiedSeconds = if (cursor.isNull(modifiedCol)) 0L else cursor.getLong(modifiedCol),
-                    category = FileClassifier.classify(name, mime),
-                    source = "all-files"
-                )
+        var skipped = 0
+        val visitedDirectories = HashSet<String>()
+        val visitedFiles = HashSet<String>()
+        val pending = ArrayDeque<Pair<File, String>>()
+        val roots = linkedMapOf<String, File>()
+
+        fun addRoot(file: File?) {
+            if (file == null) return
+            try {
+                if (file.exists() && file.isDirectory) {
+                    roots[file.canonicalPath] = file
+                }
+            } catch (error: Exception) {
+                skipped++
+                issues += ScanIssue(file.absolutePath,
+                    "تعذر الوصول إلى وحدة التخزين: ${error.localizedMessage ?: error.javaClass.simpleName}")
             }
         }
-        return rows
+
+        // Always include the primary shared storage root.
+        addRoot(Environment.getExternalStorageDirectory())
+
+        // Android 11+ exposes the mounted storage-volume directories. This
+        // discovers removable SD-card roots without assuming a fixed UUID path.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val manager = context.getSystemService(StorageManager::class.java)
+                manager?.storageVolumes?.forEach { volume ->
+                    val state = volume.state
+                    if (state == Environment.MEDIA_MOUNTED ||
+                        state == Environment.MEDIA_MOUNTED_READ_ONLY) {
+                        addRoot(volume.directory)
+                    }
+                }
+            } catch (error: Exception) {
+                skipped++
+                issues += ScanIssue("/storage",
+                    "تعذر تعداد وحدات التخزين الخارجية: ${error.localizedMessage ?: error.javaClass.simpleName}")
+            }
+        }
+
+        roots.values.forEach { root -> pending.addLast(root to "") }
+
+        val hiddenOrTemporary: (File) -> Boolean = { file ->
+            val name = file.name
+            name.startsWith(".") || name.startsWith("~$") ||
+                name.endsWith(".tmp", ignoreCase = true)
+        }
+
+        while (pending.isNotEmpty()) {
+            val (directory, relativePath) = pending.removeLast()
+            val canonicalDirectory = try {
+                directory.canonicalPath
+            } catch (error: Exception) {
+                skipped++
+                issues += ScanIssue(directory.absolutePath,
+                    "تعذر حل المسار الحقيقي للمجلد: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                continue
+            }
+            if (!visitedDirectories.add(canonicalDirectory)) continue
+
+            val children = try {
+                directory.listFiles()
+            } catch (error: SecurityException) {
+                skipped++
+                issues += ScanIssue(directory.absolutePath,
+                    "الوصول إلى المجلد مرفوض من Android: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                null
+            } catch (error: Exception) {
+                skipped++
+                issues += ScanIssue(directory.absolutePath,
+                    "فشل قراءة المجلد: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                null
+            }
+
+            if (children == null) {
+                if (directory.exists() && directory.canRead()) {
+                    skipped++
+                    issues += ScanIssue(directory.absolutePath,
+                        "تعذر تعداد محتويات المجلد (listFiles أعاد null).")
+                }
+                continue
+            }
+
+            for (child in children) {
+                try {
+                    if (hiddenOrTemporary(child)) continue
+                    val name = child.name
+                    if (child.isDirectory) {
+                        val childRelative = if (relativePath.isBlank()) name else "$relativePath/$name"
+                        val normalizedParent = relativePath.replace('\\', '/').trimEnd('/')
+                        val isAndroidProtected = normalizedParent.equals("Android", ignoreCase = true) &&
+                            (name.equals("data", ignoreCase = true) || name.equals("obb", ignoreCase = true))
+                        if (isAndroidProtected) {
+                            skipped++
+                            issues += ScanIssue(child.absolutePath,
+                                "مجلد محمي بواسطة Android (Android/data أو Android/obb)، لا يمكن فهرسته.")
+                        } else {
+                            pending.addLast(child to childRelative)
+                        }
+                        continue
+                    }
+                    if (!child.isFile) continue
+
+                    val canonicalFile = try {
+                        child.canonicalPath
+                    } catch (error: Exception) {
+                        skipped++
+                        issues += ScanIssue(child.absolutePath,
+                            "تعذر تحديد هوية الملف: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                        continue
+                    }
+                    if (!visitedFiles.add(canonicalFile)) continue
+
+                    val size = try { child.length().coerceAtLeast(0L) } catch (_: Exception) { -1L }
+                    val modified = try { child.lastModified().coerceAtLeast(0L) / 1000L } catch (_: Exception) { 0L }
+                    val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+                    val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+                    val uri = Uri.fromFile(child)
+                    val extracted = FileContentReader.extract(context, uri, name, size)
+                    if (extracted.error != null) {
+                        issues += ScanIssue(child.absolutePath, extracted.error)
+                    }
+
+                    val classification = FileClassifier.classifyDetailed(
+                        name = name,
+                        mimeType = mime,
+                        parentPath = relativePath,
+                        extractedText = extracted.text
+                    )
+                    rows += IndexedFile(
+                        uri = uri.toString(),
+                        name = name,
+                        mimeType = mime,
+                        sizeBytes = size,
+                        modifiedSeconds = modified,
+                        category = classification.mainCategory,
+                        source = "all-files",
+                        subCategory = classification.subCategory,
+                        confidence = classification.confidence
+                    )
+                } catch (error: SecurityException) {
+                    skipped++
+                    issues += ScanIssue(child.absolutePath,
+                        "صلاحية مرفوضة: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                } catch (error: Exception) {
+                    skipped++
+                    issues += ScanIssue(child.absolutePath,
+                        "تعذر فهرسة الملف: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                }
+            }
+        }
+
+        return TreeScanResult(rows, skipped, issues)
     }
 }
