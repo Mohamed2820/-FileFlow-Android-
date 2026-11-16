@@ -96,7 +96,7 @@ object FileOperations {
                 }
             }
 
-            val document = DocumentFile.fromSingleUri(context, uri)
+            val document = if (uri.scheme == "content") DocumentFile.fromSingleUri(context, uri) else null
             if (document != null && document.canWrite() && document.renameTo(name)) {
                 return FileOperationResult(true, file.copy(uri = document.uri.toString(), name = name), "تمت إعادة التسمية.")
             }
@@ -132,7 +132,7 @@ object FileOperations {
                 if (providerDeleted) return FileOperationResult(true, file, "تم حذف الملف.")
             }
 
-            val document = DocumentFile.fromSingleUri(context, uri)
+            val document = if (uri.scheme == "content") DocumentFile.fromSingleUri(context, uri) else null
             if (document != null && document.canWrite() && document.delete()) {
                 return FileOperationResult(true, file, "تم حذف الملف.")
             }
