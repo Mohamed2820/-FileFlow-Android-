@@ -370,8 +370,9 @@ private fun HomeScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var indexRevision by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(categories.size) {
+    LaunchedEffect(categories.size, indexRevision) {
         counts = withContext(Dispatchers.IO) {
             val database = FileIndexDatabase(context)
             try {
@@ -423,7 +424,7 @@ private fun HomeScreen(
                 }
             }
         }
-        item { StorageAccessPanel() }
+        item { StorageAccessPanel(onIndexUpdated = { indexRevision++ }) }
         item { DeviceStorageCard() }
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -839,7 +840,7 @@ private fun extensionLabel(file: IndexedFile): String {
 }
 
 private fun studySubjectLabel(file: IndexedFile): String =
-    FileClassifier.studySubject(file.name) ?: "مواد دراسية أخرى"
+    file.subCategory ?: FileClassifier.studySubject(file.name) ?: "مواد دراسية أخرى"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
