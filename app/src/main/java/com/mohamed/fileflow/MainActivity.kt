@@ -1627,10 +1627,99 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, ti
 
 @Composable
 private fun SettingsScreen(dark: Boolean, onTheme: (Boolean) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var permissionRefresh by remember { mutableIntStateOf(0) }
+
+    // Android settings are external screens. Refresh every status when the user returns.
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) permissionRefresh++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val sdk = android.os.Build.VERSION.SDK_INT
+    val hasAllFiles = remember(permissionRefresh) {
+        if (sdk >= android.os.Build.VERSION_CODES.R) {
+            android.os.Environment.isExternalStorageManager()
+        } else {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun hasPermission(permission: String): Boolean =
+        androidx.core.content.ContextCompat.checkSelfPermission(context, permission) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    val photosGranted = remember(permissionRefresh, hasAllFiles) {
+        hasAllFiles || if (sdk >= 33) hasPermission(android.Manifest.permission.READ_MEDIA_IMAGES)
+        else hasPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+    val videosGranted = remember(permissionRefresh, hasAllFiles) {
+        hasAllFiles || if (sdk >= 33) hasPermission(android.Manifest.permission.READ_MEDIA_VIDEO)
+        else hasPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+    val audioGranted = remember(permissionRefresh, hasAllFiles) {
+        hasAllFiles || if (sdk >= 33) hasPermission(android.Manifest.permission.READ_MEDIA_AUDIO)
+        else hasPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+    val selectedVisualGranted = remember(permissionRefresh, hasAllFiles) {
+        hasAllFiles || (sdk >= 34 && hasPermission(android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED))
+    }
+
+    fun openSettings(intent: Intent) {
+        try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (error: android.content.ActivityNotFoundException) {
+            android.widget.Toast.makeText(
+                context,
+                "لم يستطع Android فتح صفحة الإعداد المطلوبة. افتح معلومات التطبيق يدويًا.",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        } catch (error: SecurityException) {
+            android.widget.Toast.makeText(
+                context,
+                "رفض Android فتح صفحة الإعداد: ${error.localizedMessage ?: "صلاحية غير متاحة"}",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    fun openAppPermissionSettings() {
+        openSettings(
+            Intent(
+                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${context.packageName}")
+            )
+        )
+    }
+
+    fun openAllFilesSettings() {
+        if (sdk >= android.os.Build.VERSION_CODES.R) {
+            val specific = Intent(
+                android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            try {
+                specific.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(specific)
+            } catch (error: Exception) {
+                openSettings(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+        } else {
+            openAppPermissionSettings()
+        }
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             Text("التفضيلات", color = brand, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -1650,13 +1739,141 @@ private fun SettingsScreen(dark: Boolean, onTheme: (Boolean) -> Unit) {
             }
         }
         item {
-            SettingsInfoCard(Icons.Rounded.Shield, "حماية الملفات الأصلية", "سياسة التطبيق: لا نقل ولا تعديل ولا حذف تلقائي للملفات أثناء الفهرسة.")
+            Text("صلاحيات التطبيق", color = brand, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "افتح إعداد كل صلاحية وامنحها يدويًا. ستتحدث الحالة تلقائيًا عند الرجوع إلى FileFlow.",
+                color = muted, fontSize = 11.sp, lineHeight = 17.sp
+            )
         }
         item {
-            SettingsInfoCard(Icons.Rounded.PhoneAndroid, "صلاحيات الوصول", "يمكنك منح صلاحيات الصور والفيديو والصوت، أو اختيار مجلد محدد يدويًا. يقتصر الوصول على ما تسمح به إصدارات Android ومزود الملفات.")
+            PermissionActionCard(
+                icon = Icons.Rounded.FolderOpen,
+                title = "الوصول الشامل إلى جميع الملفات",
+                description = if (sdk >= 30)
+                    "الصلاحية الأساسية لفحص الذاكرة الداخلية ووحدات التخزين الخارجية التي يتيحها Android."
+                else
+                    "إذن قراءة وحدة التخزين على إصدارات Android الأقدم.",
+                granted = hasAllFiles,
+                grantedText = "ممنوحة",
+                deniedText = "مطلوبة",
+                onClick = { openAllFilesSettings() }
+            )
+        }
+        if (sdk >= 33) {
+            item {
+                PermissionActionCard(
+                    icon = Icons.Rounded.Image,
+                    title = "الوصول إلى الصور",
+                    description = "إذن الصور. قد تكون مغطاة بالفعل بصلاحية الوصول الشامل إلى الملفات.",
+                    granted = photosGranted,
+                    grantedText = "ممنوحة أو مغطاة بالوصول الشامل",
+                    deniedText = "غير ممنوحة",
+                    onClick = { openAppPermissionSettings() }
+                )
+            }
+            item {
+                PermissionActionCard(
+                    icon = Icons.Rounded.PlayCircle,
+                    title = "الوصول إلى الفيديو",
+                    description = "إذن قراءة ملفات الفيديو والوسائط المرئية.",
+                    granted = videosGranted,
+                    grantedText = "ممنوحة أو مغطاة بالوصول الشامل",
+                    deniedText = "غير ممنوحة",
+                    onClick = { openAppPermissionSettings() }
+                )
+            }
+            item {
+                PermissionActionCard(
+                    icon = Icons.Rounded.MusicNote,
+                    title = "الوصول إلى الصوتيات",
+                    description = "إذن قراءة ملفات الصوت والمقاطع الصوتية.",
+                    granted = audioGranted,
+                    grantedText = "ممنوحة أو مغطاة بالوصول الشامل",
+                    deniedText = "غير ممنوحة",
+                    onClick = { openAppPermissionSettings() }
+                )
+            }
+        }
+        if (sdk >= 34) {
+            item {
+                PermissionActionCard(
+                    icon = Icons.Rounded.PhotoLibrary,
+                    title = "الصور ومقاطع الفيديو المختارة فقط",
+                    description = "وصول محدود يتيحه Android 14 وما بعده عند اختيار وسائط محددة بدل الوصول الكامل.",
+                    granted = selectedVisualGranted,
+                    grantedText = "متاح أو مغطى بالوصول الشامل",
+                    deniedText = "غير ممنوح",
+                    onClick = { openAppPermissionSettings() }
+                )
+            }
         }
         item {
-            SettingsInfoCard(Icons.Rounded.Info, "حول FileFlow", "الإصدار 1.0.0 • تطبيق Android أصلي • التصنيف والفهرسة على الجهاز.")
+            PermissionActionCard(
+                icon = Icons.Rounded.Tune,
+                title = "إعدادات أذونات FileFlow",
+                description = "افتح صفحة معلومات التطبيق لمراجعة الأذونات الأخرى التي يعرضها إصدار Android على جهازك.",
+                granted = true,
+                grantedText = "فتح إعدادات التطبيق",
+                deniedText = "فتح إعدادات التطبيق",
+                onClick = { openAppPermissionSettings() },
+                neutralStatus = true
+            )
+        }
+        item {
+            SettingsInfoCard(
+                Icons.Rounded.Shield,
+                "حماية الملفات الأصلية",
+                "الفهرسة والتصنيف لا يحذفان الملفات الأصلية ولا ينقلانها. صلاحيات Android لا تلغي قيود النظام على بعض المجلدات المحمية."
+            )
+        }
+        item {
+            SettingsInfoCard(
+                Icons.Rounded.Info,
+                "حول FileFlow",
+                "الإصدار 1.0.0 • تطبيق Android أصلي • التصنيف والفهرسة على الجهاز."
+            )
+        }
+    }
+}
+
+@Composable
+private fun PermissionActionCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String,
+    granted: Boolean,
+    grantedText: String,
+    deniedText: String,
+    onClick: () -> Unit,
+    neutralStatus: Boolean = false
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(15.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, tint = brand, modifier = Modifier.size(23.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text(description, color = muted, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (neutralStatus) grantedText else if (granted) grantedText else deniedText,
+                    color = if (neutralStatus) muted else if (granted) Color(0xFF2E7D32) else Color(0xFFC62828),
+                    fontSize = 10.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 13.dp, vertical = 5.dp)) {
+                    Icon(Icons.Rounded.Settings, null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (neutralStatus) "فتح الإعدادات" else "إعداد الصلاحية", fontSize = 11.sp)
+                }
+            }
         }
     }
 }
