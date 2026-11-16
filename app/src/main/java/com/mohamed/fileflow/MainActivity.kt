@@ -1448,7 +1448,14 @@ private fun IndexedFilesContent(
 
 private fun openFileExternally(context: android.content.Context, file: IndexedFile) {
     runCatching {
-        val uri = Uri.parse(file.uri)
+        val sourceUri = Uri.parse(file.uri)
+        val uri = if (sourceUri.scheme == "file") {
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                java.io.File(sourceUri.path ?: throw IllegalArgumentException("مسار الملف غير متاح"))
+            )
+        } else sourceUri
         val mime = FileOperations.mimeType(context, file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mime)
@@ -1467,7 +1474,14 @@ private fun openFileExternally(context: android.content.Context, file: IndexedFi
 
 private fun shareIndexedFile(context: android.content.Context, file: IndexedFile) {
     runCatching {
-        val uri = Uri.parse(file.uri)
+        val sourceUri = Uri.parse(file.uri)
+        val uri = if (sourceUri.scheme == "file") {
+            androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                java.io.File(sourceUri.path ?: throw IllegalArgumentException("مسار الملف غير متاح"))
+            )
+        } else sourceUri
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = FileOperations.mimeType(context, file)
             putExtra(Intent.EXTRA_STREAM, uri)
