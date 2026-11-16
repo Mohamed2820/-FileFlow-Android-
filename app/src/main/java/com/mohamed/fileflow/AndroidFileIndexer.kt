@@ -400,7 +400,9 @@ object AndroidFileIndexer {
                             }
                         }
                         child.isFile -> {
-                            val name = android.net.Uri.decode(childName)
+                            // DocumentFile.name is already decoded. Decoding it again corrupts
+                            // legitimate percent signs and encoded-looking filenames.
+                            val name = childName
                             val size = queryDocumentSize(context, child.uri) ?: -1L
                             val modified = child.lastModified().coerceAtLeast(0L) / 1000L
                             val extraction = FileContentReader.extract(context, child.uri, name, size)
