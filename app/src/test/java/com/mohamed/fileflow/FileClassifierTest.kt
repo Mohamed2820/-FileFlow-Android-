@@ -44,6 +44,36 @@ class FileClassifierTest {
     }
 
     @Test
+    fun smartClassificationUsesParentFoldersAndContent() {
+        val byFolder = FileClassifier.classifyDetailed(
+            name = "chapter-01.pdf",
+            mimeType = "application/pdf",
+            parentPath = "الدراسة/الكيمياء"
+        )
+        assertEquals("study", byFolder.mainCategory)
+        assertEquals("كيمياء", byFolder.subCategory)
+        org.junit.Assert.assertTrue(byFolder.confidence >= 0.25)
+
+        val byContent = FileClassifier.classifyDetailed(
+            name = "lecture-notes.pdf",
+            mimeType = "application/pdf",
+            extractedText = "Introduction to organic chemistry and chemical bonds"
+        )
+        assertEquals("study", byContent.mainCategory)
+        assertEquals("كيمياء", byContent.subCategory)
+    }
+
+    @Test
+    fun arabicNormalizationRemovesDiacriticsAndNormalizesDigits() {
+        val result = FileClassifier.classifyDetailed(
+            name = "ملخص كِيمِيَاء ٢٠٢٦.pdf",
+            mimeType = "application/pdf"
+        )
+        assertEquals("study", result.mainCategory)
+        assertEquals("كيمياء", result.subCategory)
+    }
+
+    @Test
     fun explicitProjectNamesAreGroupedAsProjects() {
         assertEquals("projects", FileClassifier.classify("MOMO_Project_Main.kt", "application/octet-stream"))
         assertEquals("projects", FileClassifier.classify("مشروع التخرج.pdf", "application/pdf"))
