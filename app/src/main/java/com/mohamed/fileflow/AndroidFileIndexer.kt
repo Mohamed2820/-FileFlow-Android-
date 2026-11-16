@@ -155,8 +155,11 @@ class FileIndexDatabase(context: Context) :
                     put("mime_type", file.mimeType)
                     put("size_bytes", file.sizeBytes)
                     put("modified_seconds", file.modifiedSeconds)
-                    put("category", manualCategory(file.uri) ?: file.category)
+                    val manual = manualClassification(file.uri)
+                    put("category", manual?.first ?: file.category)
                     put("source", file.source)
+                    put("sub_category", if (manual != null) manual.second else file.subCategory)
+                    put("confidence", if (manual != null) 1.0 else file.confidence)
                 }
                 val row = writableDatabase.insertWithOnConflict(
                     "indexed_files", null, values, SQLiteDatabase.CONFLICT_REPLACE
