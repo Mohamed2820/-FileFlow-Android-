@@ -45,8 +45,7 @@ fun StorageAccessPanel(onIndexUpdated: () -> Unit = {}) {
             status = "جارٍ فحص الملفات وحفظ بياناتها محليًا..."
             try {
                 val broadAccessAtScan = AllFilesIndexer.hasAccess(context)
-                // With broad access, scan MediaStore.Files once so photos/videos/audio
-                // are not omitted when their separate granular permissions are absent.
+                // The broad-access path walks mounted shared-storage volumes directly.
                 val media = if (broadAccessAtScan) emptyList() else withContext(Dispatchers.IO) {
                     AndroidFileIndexer.scanMedia(context)
                 }
@@ -288,7 +287,7 @@ fun StorageAccessPanel(onIndexUpdated: () -> Unit = {}) {
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("تحديث فهرسة الصور والفيديو والصوت")
+                Text("إعادة فهرسة جميع الملفات")
             }
 
             TextButton(
