@@ -229,26 +229,23 @@ object AllFilesIndexer {
             }
             if (!visitedDirectories.add(canonicalDirectory)) continue
 
+            var listFailure: String? = null
             val children = try {
                 directory.listFiles()
             } catch (error: SecurityException) {
-                skipped++
-                issues += ScanIssue(directory.absolutePath,
-                    "الوصول إلى المجلد مرفوض من Android: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                listFailure = "الوصول إلى المجلد مرفوض من Android: ${error.localizedMessage ?: error.javaClass.simpleName}"
                 null
             } catch (error: Exception) {
-                skipped++
-                issues += ScanIssue(directory.absolutePath,
-                    "فشل قراءة المجلد: ${error.localizedMessage ?: error.javaClass.simpleName}")
+                listFailure = "فشل قراءة المجلد: ${error.localizedMessage ?: error.javaClass.simpleName}"
                 null
             }
 
             if (children == null) {
-                if (directory.exists() && directory.canRead()) {
-                    skipped++
-                    issues += ScanIssue(directory.absolutePath,
-                        "تعذر تعداد محتويات المجلد (listFiles أعاد null).")
-                }
+                skipped++
+                issues += ScanIssue(
+                    directory.absolutePath,
+                    listFailure ?: "تعذر تعداد محتويات المجلد (listFiles أعاد null أو لا توجد صلاحية)."
+                )
                 continue
             }
 
